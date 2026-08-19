@@ -8,6 +8,8 @@
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
   padding: 3px 4px;
   gap: 1px;
+  z-index: 100;
+  transform: translateX(-50%);
 }
 
 .cw-bubble-menu button {

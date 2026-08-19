@@ -24,7 +24,11 @@ function useBubblePos(editor: TiptapEditor | null) {
       if (!sel || sel.rangeCount === 0) { setCoords(null); return }
       const rect = sel.getRangeAt(0).getBoundingClientRect()
       if (!rect.width) { setCoords(null); return }
-      setCoords({ top: rect.top - 48, left: rect.left + rect.width / 2 })
+      // show above if there's room, below otherwise
+      const bubbleH = 44
+      const gap = 8
+      const top = rect.top - bubbleH - gap >= 0 ? rect.top - bubbleH - gap : rect.bottom + gap
+      setCoords({ top, left: rect.left + rect.width / 2 })
     }
     const clear = () => setCoords(null)
     editor.on('selectionUpdate', update)
@@ -92,6 +96,20 @@ export function Editor({
       Typography,
     ],
     content: initialContent,
+    editorProps: {
+      handleKeyDown: (view, event) => {
+        // Prevent Tab from leaving the editor in prose context;
+        // list indentation is still handled by StarterKit.
+        if (event.key === 'Tab') {
+          const isInList = view.state.selection.$head.parent.type.name === 'listItem'
+          if (!isInList) {
+            event.preventDefault()
+            return true
+          }
+        }
+        return false
+      },
+    },
     onUpdate: ({ editor }) => {
       onChange?.(editor.getHTML())
       scrollToCursor(editor)
