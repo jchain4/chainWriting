@@ -25,6 +25,7 @@ export default defineConfig({
         '@tiptap/starter-kit',
         '@tiptap/extension-placeholder',
         '@tiptap/extension-typography',
+        '@tiptap/extension-link',
         '@tiptap/pm',
       ],
       output: {

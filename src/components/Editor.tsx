@@ -11,6 +11,8 @@ export interface EditorProps {
   initialContent?: string
   placeholder?: string
   typewriterMode?: boolean
+  /** Extra class added to the root .cw-editor wrapper — use for scoped CSS variable overrides */
+  className?: string
   onChange?: (html: string) => void
 }
 
@@ -89,6 +91,7 @@ export function Editor({
   initialContent = '',
   placeholder = 'Start writing…',
   typewriterMode = false,
+  className,
   onChange,
 }: EditorProps) {
   const rafRef = useRef<number | null>(null)
@@ -156,9 +159,9 @@ export function Editor({
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <>
+    <div className={`cw-editor${className ? ` ${className}` : ''}`}>
       {editor && <BubbleToolbar editor={editor} />}
       <EditorContent editor={editor} />
-    </>
+    </div>
   )
 }

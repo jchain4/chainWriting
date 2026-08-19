@@ -262,10 +262,16 @@ body {
   padding: 80px 24px 120px;
 }
 
+/* Pass demo design tokens into the editor component */
+.editor-wrapper .cw-editor {
+  --cw-placeholder-color:   var(--color-text-muted);
+  --cw-placeholder-opacity: 1;
+  --cw-link-color:          var(--color-accent);
+}
+
 /* ── ProseMirror content styles ── */
 
 .ProseMirror {
-  outline: none;
   min-height: 60vh;
 }
 

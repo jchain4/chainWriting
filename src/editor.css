@@ -1,11 +1,38 @@
-/* chain-writing editor styles — import in your app alongside this library */
+/*
+  chain-writing — editor styles
+  Import in your app: import 'chain-writing/style.css'
+
+  Theming: set these CSS variables on a parent element or .cw-editor
+  to override the bubble menu appearance without touching library code.
+*/
+
+.cw-editor {
+  /* Bubble menu tokens — override these to match your design */
+  --cw-bubble-bg:          #18181b;
+  --cw-bubble-border:      #27272a;
+  --cw-bubble-shadow:      0 4px 16px rgba(0, 0, 0, 0.35);
+  --cw-bubble-text:        #a1a1aa;
+  --cw-bubble-text-active: #f4f4f5;
+  --cw-bubble-hover-bg:    #27272a;
+  --cw-bubble-active-bg:   #3f3f46;
+  --cw-bubble-divider:     #3f3f46;
+
+  /* Placeholder token */
+  --cw-placeholder-color:  currentColor;
+  --cw-placeholder-opacity: 0.35;
+
+  /* Link token */
+  --cw-link-color: currentColor;
+}
+
+/* ── Bubble menu ── */
 
 .cw-bubble-menu {
   display: flex;
   align-items: center;
-  background: #18181b;
-  border: 1px solid #27272a;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  background: var(--cw-bubble-bg);
+  border: 1px solid var(--cw-bubble-border);
+  box-shadow: var(--cw-bubble-shadow);
   padding: 3px 4px;
   gap: 1px;
   z-index: 100;
@@ -15,7 +42,7 @@
 .cw-bubble-menu button {
   background: none;
   border: none;
-  color: #a1a1aa;
+  color: var(--cw-bubble-text);
   cursor: pointer;
   font-size: 11px;
   font-weight: 600;
@@ -27,39 +54,52 @@
 }
 
 .cw-bubble-menu button:hover {
-  color: #f4f4f5;
-  background: #27272a;
+  color: var(--cw-bubble-text-active);
+  background: var(--cw-bubble-hover-bg);
 }
 
 .cw-bubble-menu button.is-active {
-  color: #f4f4f5;
-  background: #3f3f46;
+  color: var(--cw-bubble-text-active);
+  background: var(--cw-bubble-active-bg);
 }
 
 .cw-bubble-menu__divider {
   width: 1px;
   height: 16px;
-  background: #27272a;
+  background: var(--cw-bubble-divider);
   margin: 0 3px;
   flex-shrink: 0;
 }
 
-/* Placeholder */
+/* ── Placeholder ── */
+
 .ProseMirror p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   float: left;
   height: 0;
   pointer-events: none;
   font-style: italic;
-  opacity: 0.45;
+  color: var(--cw-placeholder-color);
+  opacity: var(--cw-placeholder-opacity);
 }
 
-/* Links */
-.ProseMirror a {
+/* ── ProseMirror base ── */
+
+.ProseMirror {
+  outline: none;
+  /* Inherit everything from the host container so the editor
+     blends into the page's typography without imposing its own */
+  font: inherit;
   color: inherit;
+  line-height: inherit;
+}
+
+/* ── Links ── */
+
+.ProseMirror a {
+  color: var(--cw-link-color);
   text-decoration: underline;
   text-underline-offset: 3px;
-  text-decoration-color: currentColor;
   opacity: 0.75;
   cursor: pointer;
   transition: opacity 0.15s;
@@ -67,9 +107,4 @@
 
 .ProseMirror a:hover {
   opacity: 1;
-}
-
-/* Base ProseMirror reset */
-.ProseMirror {
-  outline: none;
 }
