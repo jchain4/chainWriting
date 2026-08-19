@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -9,10 +9,12 @@ import type { Editor as TiptapEditor } from '@tiptap/react'
 interface EditorProps {
   docId: string
   initialContent: string
+  typewriterMode?: boolean
+  onHtmlChange?: (html: string) => void
 }
 
-export function Editor({ docId, initialContent }: EditorProps) {
-  return <EditorInner key={docId} docId={docId} initialContent={initialContent} />
+export function Editor(props: EditorProps) {
+  return <EditorInner key={props.docId} {...props} />
 }
 
 function useBubblePos(editor: TiptapEditor | null) {
@@ -20,7 +22,6 @@ function useBubblePos(editor: TiptapEditor | null) {
 
   useEffect(() => {
     if (!editor) return
-
     const update = () => {
       if (editor.state.selection.empty) { setCoords(null); return }
       const sel = window.getSelection()
@@ -29,7 +30,6 @@ function useBubblePos(editor: TiptapEditor | null) {
       if (!rect.width) { setCoords(null); return }
       setCoords({ top: rect.top - 48, left: rect.left + rect.width / 2 })
     }
-
     const clear = () => setCoords(null)
     editor.on('selectionUpdate', update)
     editor.on('blur', clear)
@@ -67,9 +67,23 @@ function BubbleToolbar({ editor }: { editor: TiptapEditor }) {
   )
 }
 
-function EditorInner({ docId, initialContent }: EditorProps) {
+function EditorInner({ docId, initialContent, typewriterMode = false, onHtmlChange }: EditorProps) {
   const [content, setContent] = useState(initialContent)
   const { saved } = useAutosave(docId, content)
+  const rafRef = useRef<number | null>(null)
+
+  const scrollToCursor = useCallback((editor: TiptapEditor) => {
+    if (!typewriterMode) return
+    if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    rafRef.current = requestAnimationFrame(() => {
+      try {
+        const { from } = editor.state.selection
+        const coords = editor.view.coordsAtPos(from)
+        const desired = window.scrollY + coords.top - window.innerHeight / 2
+        window.scrollTo({ top: Math.max(0, desired), behavior: 'instant' })
+      } catch {}
+    })
+  }, [typewriterMode])
 
   const editor = useEditor({
     extensions: [
@@ -78,8 +92,21 @@ function EditorInner({ docId, initialContent }: EditorProps) {
       Typography,
     ],
     content: initialContent,
-    onUpdate: ({ editor }) => setContent(editor.getHTML()),
+    onUpdate: ({ editor }) => {
+      const html = editor.getHTML()
+      setContent(html)
+      onHtmlChange?.(html)
+      scrollToCursor(editor)
+    },
+    onSelectionUpdate: ({ editor }) => {
+      scrollToCursor(editor)
+    },
   })
+
+  // Expose initial content on mount
+  useEffect(() => {
+    if (initialContent) onHtmlChange?.(initialContent)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="editor-wrapper">
