@@ -1,22 +1,18 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Typography from '@tiptap/extension-typography'
-import { useAutosave, loadDocument } from '../hooks/useAutosave'
+import { useAutosave } from '../hooks/useAutosave'
 import type { Editor as TiptapEditor } from '@tiptap/react'
 
-const EMPTY = '<p></p>'
+interface EditorProps {
+  docId: string
+  initialContent: string
+}
 
-export function Editor() {
-  const [initialContent, setInitialContent] = useState<string | null>(null)
-
-  useEffect(() => {
-    loadDocument().then((saved) => setInitialContent(saved ?? EMPTY))
-  }, [])
-
-  if (initialContent === null) return null
-  return <EditorInner initialContent={initialContent} />
+export function Editor({ docId, initialContent }: EditorProps) {
+  return <EditorInner key={docId} docId={docId} initialContent={initialContent} />
 }
 
 function useBubblePos(editor: TiptapEditor | null) {
@@ -35,7 +31,6 @@ function useBubblePos(editor: TiptapEditor | null) {
     }
 
     const clear = () => setCoords(null)
-
     editor.on('selectionUpdate', update)
     editor.on('blur', clear)
     return () => { editor.off('selectionUpdate', update); editor.off('blur', clear) }
@@ -59,10 +54,7 @@ function BubbleToolbar({ editor }: { editor: TiptapEditor }) {
   )
 
   return (
-    <div
-      className="bubble-menu"
-      style={{ position: 'fixed', top: coords.top, left: coords.left }}
-    >
+    <div className="bubble-menu" style={{ position: 'fixed', top: coords.top, left: coords.left }}>
       {btn('B', editor.isActive('bold'), () => editor.chain().focus().toggleBold().run(), 'Negrita (Ctrl+B)')}
       {btn('I', editor.isActive('italic'), () => editor.chain().focus().toggleItalic().run(), 'Cursiva (Ctrl+I)')}
       {btn('S', editor.isActive('strike'), () => editor.chain().focus().toggleStrike().run(), 'Tachado')}
@@ -75,10 +67,9 @@ function BubbleToolbar({ editor }: { editor: TiptapEditor }) {
   )
 }
 
-function EditorInner({ initialContent }: { initialContent: string }) {
+function EditorInner({ docId, initialContent }: EditorProps) {
   const [content, setContent] = useState(initialContent)
-  const { saved } = useAutosave(content)
-  const wrapperRef = useRef<HTMLDivElement>(null)
+  const { saved } = useAutosave(docId, content)
 
   const editor = useEditor({
     extensions: [
@@ -91,7 +82,7 @@ function EditorInner({ initialContent }: { initialContent: string }) {
   })
 
   return (
-    <div className="editor-wrapper" ref={wrapperRef}>
+    <div className="editor-wrapper">
       <span className={`save-status${saved ? ' save-status--visible' : ''}`}>
         Guardado
       </span>
