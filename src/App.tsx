@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Editor } from './components/Editor'
 import { Footer } from './components/Footer'
 import { Sidebar } from './components/Sidebar'
+import { useAutosave } from './hooks/useAutosave'
 import { countWords, downloadMarkdown } from './lib/exportMarkdown'
 import {
   createDoc,
@@ -22,9 +23,10 @@ export default function App() {
   const [focusMode, setFocusMode] = useState(false)
   const [currentHtml, setCurrentHtml] = useState('')
   const [ready, setReady] = useState(false)
-  const editorRef = useRef<HTMLDivElement>(null)
 
-  // Bootstrap: migrate legacy data, load docs and active doc
+  // Autosave: lives here in the demo app, not inside the Editor
+  const { saved } = useAutosave(activeDoc?.id ?? '', currentHtml)
+
   useEffect(() => {
     async function init() {
       const migrated = await migrateLegacy()
@@ -46,7 +48,6 @@ export default function App() {
     init()
   }, [])
 
-  // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey
@@ -98,7 +99,6 @@ export default function App() {
     downloadMarkdown(activeDoc.title, currentHtml)
   }, [activeDoc, currentHtml])
 
-  // Refresh doc list periodically (keeps titles in sync after autosave)
   useEffect(() => {
     const interval = setInterval(refreshDocs, 3000)
     return () => clearInterval(interval)
@@ -106,10 +106,14 @@ export default function App() {
 
   if (!ready || !activeDoc) return null
 
-  const wordCount = countWords(currentHtml)
-
   return (
     <div className={`app${focusMode ? ' app--focus' : ''}`}>
+      {!focusMode && (
+        <span className={`save-status${saved ? ' save-status--visible' : ''}`}>
+          Guardado
+        </span>
+      )}
+
       {!sidebarOpen && !focusMode && (
         <button
           className="sidebar-trigger"
@@ -131,19 +135,22 @@ export default function App() {
 
       <main
         className="app__editor"
-        ref={editorRef}
         onClick={() => sidebarOpen && setSidebarOpen(false)}
       >
-        <Editor
-          docId={activeDoc.id}
-          initialContent={activeDoc.content}
-          typewriterMode={typewriterMode}
-          onHtmlChange={setCurrentHtml}
-        />
+        <div className="editor-wrapper">
+          {/* key resets Tiptap when switching documents */}
+          <Editor
+            key={activeDoc.id}
+            initialContent={activeDoc.content}
+            placeholder="Empieza a escribir…"
+            typewriterMode={typewriterMode}
+            onChange={setCurrentHtml}
+          />
+        </div>
       </main>
 
       <Footer
-        wordCount={wordCount}
+        wordCount={countWords(currentHtml)}
         docTitle={activeDoc.title}
         docHtml={currentHtml}
         typewriterMode={typewriterMode}
