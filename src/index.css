@@ -68,6 +68,79 @@ body {
   opacity: 1;
 }
 
+/* ── Bubble menu ── */
+
+.bubble-menu {
+  display: flex;
+  align-items: center;
+  background: #18181b;
+  border: 1px solid #27272a;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  padding: 3px 4px;
+  gap: 1px;
+}
+
+.bubble-menu button {
+  background: none;
+  border: none;
+  color: #a1a1aa;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 4px 7px;
+  line-height: 1;
+  border-radius: 2px;
+  transition: color 0.12s, background 0.12s;
+}
+
+.bubble-menu button:nth-child(1),
+.bubble-menu button:nth-child(2),
+.bubble-menu button:nth-child(3) {
+  font-family: var(--font-sans);
+}
+
+.bubble-menu button:nth-child(5),
+.bubble-menu button:nth-child(6) {
+  font-family: var(--font-serif);
+  font-size: 12px;
+}
+
+.bubble-menu button:nth-child(8) {
+  font-family: var(--font-serif);
+  font-size: 14px;
+  font-style: italic;
+}
+
+.bubble-menu button:hover {
+  color: #f4f4f5;
+  background: #27272a;
+}
+
+.bubble-menu button.is-active {
+  color: #f4f4f5;
+  background: #3f3f46;
+}
+
+.bubble-menu__divider {
+  width: 1px;
+  height: 16px;
+  background: #27272a;
+  margin: 0 3px;
+  flex-shrink: 0;
+}
+
+/* ── Placeholder ── */
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  color: var(--color-text-muted);
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  font-style: italic;
+}
+
 /* ── Editor layout ── */
 
 .editor-wrapper {
