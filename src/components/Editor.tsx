@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
-import Link from '@tiptap/extension-link'
-import Underline from '@tiptap/extension-underline'
 import Placeholder from '@tiptap/extension-placeholder'
 import Typography from '@tiptap/extension-typography'
 import type { Editor as TiptapEditor } from '@tiptap/react'
@@ -16,6 +14,16 @@ export interface EditorProps {
   className?: string
   onChange?: (html: string) => void
 }
+
+interface LinkPopoverState {
+  top: number
+  left: number
+  from: number
+  to: number
+  initialUrl: string
+}
+
+// ── Bubble position hook ────────────────────────────────────────────────────
 
 function useBubblePos(editor: TiptapEditor | null) {
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(null)
@@ -33,31 +41,34 @@ function useBubblePos(editor: TiptapEditor | null) {
       const top = rect.top - bubbleH - gap >= 0 ? rect.top - bubbleH - gap : rect.bottom + gap
       setCoords({ top, left: rect.left + rect.width / 2 })
     }
-    const clear = () => setCoords(null)
+    // Delay blur-clear so onMouseDown/onPointerDown handlers on bubble buttons
+    // can fire before the bubble unmounts (native pointerdown fires before mousedown).
+    let blurTimer: ReturnType<typeof setTimeout>
+    const clear = () => { blurTimer = setTimeout(() => setCoords(null), 150) }
+    const cancelClear = () => clearTimeout(blurTimer)
     editor.on('selectionUpdate', update)
     editor.on('blur', clear)
-    return () => { editor.off('selectionUpdate', update); editor.off('blur', clear) }
+    editor.on('focus', cancelClear)
+    return () => {
+      clearTimeout(blurTimer)
+      editor.off('selectionUpdate', update)
+      editor.off('blur', clear)
+      editor.off('focus', cancelClear)
+    }
   }, [editor])
 
   return coords
 }
 
-function promptLink(editor: TiptapEditor) {
-  if (editor.isActive('link')) {
-    editor.chain().focus().unsetLink().run()
-    return
-  }
-  const previous = editor.getAttributes('link').href as string | undefined
-  const url = window.prompt('URL del enlace:', previous ?? 'https://')
-  if (url === null) return
-  if (url.trim() === '') {
-    editor.chain().focus().unsetLink().run()
-  } else {
-    editor.chain().focus().setLink({ href: url.trim() }).run()
-  }
-}
+// ── Bubble toolbar ──────────────────────────────────────────────────────────
 
-function BubbleToolbar({ editor }: { editor: TiptapEditor }) {
+function BubbleToolbar({
+  editor,
+  onLinkClick,
+}: {
+  editor: TiptapEditor
+  onLinkClick: (editor: TiptapEditor) => void
+}) {
   const coords = useBubblePos(editor)
   if (!coords) return null
 
@@ -72,7 +83,8 @@ function BubbleToolbar({ editor }: { editor: TiptapEditor }) {
       key={format}
       data-format={format}
       className={active ? 'is-active' : ''}
-      onMouseDown={(e) => { e.preventDefault(); action() }}
+      tabIndex={-1}
+      onPointerDown={(e) => { e.preventDefault(); action() }}
       title={title}
     >
       {label}
@@ -93,10 +105,82 @@ function BubbleToolbar({ editor }: { editor: TiptapEditor }) {
       {sep()}
       {btn('"', 'blockquote', editor.isActive('blockquote'), () => editor.chain().focus().toggleBlockquote().run(), 'Cita')}
       {sep()}
-      {btn('↗', 'link', editor.isActive('link'), () => promptLink(editor), 'Enlace (Ctrl+K)')}
+      {btn('↗', 'link', editor.isActive('link'), () => onLinkClick(editor), 'Enlace (Ctrl+K)')}
     </div>
   )
 }
+
+// ── Link popover ────────────────────────────────────────────────────────────
+
+function LinkPopover({
+  state,
+  onApply,
+  onClose,
+}: {
+  state: LinkPopoverState
+  onApply: (url: string) => void
+  onClose: () => void
+}) {
+  const [url, setUrl] = useState(state.initialUrl)
+  const ref = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    inputRef.current?.focus()
+    inputRef.current?.select()
+  }, [])
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        onClose()
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [onClose])
+
+  return (
+    <div
+      ref={ref}
+      className="cw-link-popover"
+      style={{ top: state.top, left: state.left }}
+    >
+      <input
+        ref={inputRef}
+        type="url"
+        value={url}
+        className="cw-link-input"
+        placeholder="https://"
+        onChange={(e) => setUrl(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); onApply(url) }
+          if (e.key === 'Escape') { e.preventDefault(); onClose() }
+        }}
+      />
+      <button
+        className="cw-link-btn cw-link-apply"
+        title="Aplicar (Enter)"
+        tabIndex={-1}
+        onPointerDown={(e) => { e.preventDefault(); onApply(url) }}
+      >
+        ↵
+      </button>
+      {state.initialUrl && (
+        <button
+          className="cw-link-btn cw-link-remove"
+          title="Eliminar enlace"
+          tabIndex={-1}
+          onPointerDown={(e) => { e.preventDefault(); onApply('') }}
+        >
+          ✕
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ── Editor ──────────────────────────────────────────────────────────────────
 
 export function Editor({
   initialContent = '',
@@ -106,6 +190,7 @@ export function Editor({
   onChange,
 }: EditorProps) {
   const rafRef = useRef<number | null>(null)
+  const [linkState, setLinkState] = useState<LinkPopoverState | null>(null)
 
   const scrollToCursor = useCallback((editor: TiptapEditor) => {
     if (!typewriterMode) return
@@ -122,9 +207,9 @@ export function Editor({
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
-      Underline,
-      Link.configure({ openOnClick: false, autolink: true }),
+      StarterKit.configure({
+        link: { openOnClick: false, autolink: true },
+      }),
       Placeholder.configure({ placeholder }),
       Typography,
     ],
@@ -150,20 +235,49 @@ export function Editor({
     },
   })
 
-  // Ctrl+K: set/unset link on selected text
+  const openLink = useCallback((ed: TiptapEditor) => {
+    const { from, to } = ed.state.selection
+    if (from === to && !ed.isActive('link')) return
+    try {
+      const startCoords = ed.view.coordsAtPos(from)
+      const endCoords = ed.view.coordsAtPos(to)
+      const midX = (startCoords.left + endCoords.right) / 2
+      const popoverH = 44
+      const gap = 10
+      const top = startCoords.bottom + popoverH + gap < window.innerHeight
+        ? startCoords.bottom + gap
+        : startCoords.top - popoverH - gap
+      const initialUrl = (ed.getAttributes('link').href as string) ?? ''
+      setLinkState({ top, left: midX, from, to, initialUrl })
+    } catch {}
+  }, [])
+
+  const applyLink = useCallback((url: string) => {
+    if (!editor || !linkState) return
+    const { from, to } = linkState
+    const trimmed = url.trim()
+    if (trimmed) {
+      editor.chain().setTextSelection({ from, to }).setLink({ href: trimmed }).run()
+    } else if (linkState.initialUrl) {
+      editor.chain().setTextSelection({ from, to }).unsetLink().run()
+    }
+    setLinkState(null)
+  }, [editor, linkState])
+
+  // Ctrl+K: open link popover on selected text or when cursor is on a link
   useEffect(() => {
     if (!editor) return
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault()
         if (!editor.state.selection.empty || editor.isActive('link')) {
-          promptLink(editor)
+          openLink(editor)
         }
       }
     }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
-  }, [editor])
+  }, [editor, openLink])
 
   // Fire onChange once on mount so the host has the initial HTML
   useEffect(() => {
@@ -172,7 +286,19 @@ export function Editor({
 
   return (
     <div className={`cw-editor${className ? ` ${className}` : ''}`}>
-      {editor && <BubbleToolbar editor={editor} />}
+      {editor && (
+        <BubbleToolbar
+          editor={editor}
+          onLinkClick={openLink}
+        />
+      )}
+      {linkState && (
+        <LinkPopover
+          state={linkState}
+          onApply={applyLink}
+          onClose={() => setLinkState(null)}
+        />
+      )}
       <EditorContent editor={editor} />
     </div>
   )

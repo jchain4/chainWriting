@@ -2,19 +2,20 @@
   chain-writing — editor styles
   Import in your app: import 'chain-writing/style.css'
 
-  All bubble colours are CSS variables — override on .cw-editor or any
-  ancestor to re-theme without touching library code.
+  All bubble and popover colours are CSS variables — override on
+  .cw-editor or any ancestor to re-theme without touching library code.
 */
 
 /* ── Token defaults ── */
 
 .cw-editor {
-  --cw-bubble-bg:          #18181b;
-  --cw-bubble-border:      rgba(255, 255, 255, 0.08);
-  --cw-bubble-shadow:      0 8px 24px rgba(0, 0, 0, 0.45),
-                           0 2px 6px  rgba(0, 0, 0, 0.3);
-  --cw-bubble-text:        rgba(255, 255, 255, 0.45);
-  --cw-bubble-text-hover:  rgba(255, 255, 255, 0.9);
+  --cw-bubble-bg:          rgba(15, 15, 17, 0.88);
+  --cw-bubble-border:      rgba(255, 255, 255, 0.1);
+  --cw-bubble-shadow:      0 8px 28px rgba(0, 0, 0, 0.45),
+                           0 2px 6px  rgba(0, 0, 0, 0.3),
+                           inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --cw-bubble-text:        rgba(255, 255, 255, 0.42);
+  --cw-bubble-text-hover:  rgba(255, 255, 255, 0.92);
   --cw-bubble-text-active: #e8e6e3;
   --cw-bubble-hover-bg:    rgba(255, 255, 255, 0.07);
   --cw-bubble-active-bg:   rgba(255, 255, 255, 0.14);
@@ -25,12 +26,12 @@
   --cw-link-color:          currentColor;
 }
 
-/* ── Bubble menu entry animation ── */
+/* ── Shared entry animation ── */
 
-@keyframes cw-bubble-in {
+@keyframes cw-float-in {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(5px) scale(0.96);
+    transform: translateX(-50%) translateY(5px) scale(0.97);
   }
   to {
     opacity: 1;
@@ -43,14 +44,16 @@
 .cw-bubble-menu {
   display: flex;
   align-items: center;
+  gap: 0;
+  padding: 3px 4px;
   background: var(--cw-bubble-bg);
+  backdrop-filter: blur(14px) saturate(180%);
+  -webkit-backdrop-filter: blur(14px) saturate(180%);
   border: 1px solid var(--cw-bubble-border);
   box-shadow: var(--cw-bubble-shadow);
-  padding: 3px 4px;
-  gap: 0;
+  border-radius: 4px;
   z-index: 100;
-  border-radius: 0;
-  animation: cw-bubble-in 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: cw-float-in 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -72,7 +75,7 @@
   letter-spacing: 0;
   padding: 5px 8px;
   line-height: 1;
-  border-radius: 0;
+  border-radius: 3px;
   transition: color 0.1s, background 0.1s;
   white-space: nowrap;
 }
@@ -87,7 +90,7 @@
   background: var(--cw-bubble-active-bg);
 }
 
-/* Self-formatting labels — the button shows its own format */
+/* Self-formatting labels */
 
 .cw-bubble-menu button[data-format="bold"] {
   font-weight: 700;
@@ -96,7 +99,6 @@
 .cw-bubble-menu button[data-format="italic"] {
   font-style: italic;
   font-weight: 400;
-  letter-spacing: 0.01em;
 }
 
 .cw-bubble-menu button[data-format="underline"] {
@@ -120,8 +122,6 @@
   text-decoration-color: var(--cw-bubble-text-hover);
 }
 
-/* Heading buttons: size encodes hierarchy */
-
 .cw-bubble-menu button[data-format="h2"] {
   font-size: 12px;
   font-weight: 600;
@@ -132,16 +132,12 @@
   font-weight: 600;
 }
 
-/* Blockquote button: typographic left quote, slightly larger */
-
 .cw-bubble-menu button[data-format="blockquote"] {
   font-size: 15px;
   font-weight: 400;
   line-height: 0.9;
   padding-bottom: 7px;
 }
-
-/* Link button */
 
 .cw-bubble-menu button[data-format="link"] {
   font-size: 12px;
@@ -155,6 +151,83 @@
   background: var(--cw-bubble-divider);
   margin: 0 2px;
   flex-shrink: 0;
+}
+
+/* ── Link popover ── */
+
+.cw-link-popover {
+  position: fixed;
+  z-index: 100;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 6px;
+  background: var(--cw-bubble-bg);
+  backdrop-filter: blur(14px) saturate(180%);
+  -webkit-backdrop-filter: blur(14px) saturate(180%);
+  border: 1px solid var(--cw-bubble-border);
+  box-shadow: var(--cw-bubble-shadow);
+  border-radius: 4px;
+  animation: cw-float-in 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cw-link-popover {
+    animation: none;
+    transform: translateX(-50%);
+  }
+}
+
+.cw-link-input {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 12px;
+  font-family: inherit;
+  padding: 4px 8px;
+  width: 220px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.cw-link-input::placeholder {
+  color: rgba(255, 255, 255, 0.22);
+}
+
+.cw-link-input:focus {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.cw-link-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 7px;
+  border-radius: 3px;
+  line-height: 1;
+  transition: color 0.1s, background 0.1s;
+}
+
+.cw-link-apply {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.cw-link-apply:hover {
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.cw-link-remove {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.cw-link-remove:hover {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.1);
 }
 
 /* ── Placeholder ── */
