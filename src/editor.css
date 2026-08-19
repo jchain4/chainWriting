@@ -54,6 +54,21 @@
   opacity: 0.45;
 }
 
+/* Links */
+.ProseMirror a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: currentColor;
+  opacity: 0.75;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.ProseMirror a:hover {
+  opacity: 1;
+}
+
 /* Base ProseMirror reset */
 .ProseMirror {
   outline: none;
