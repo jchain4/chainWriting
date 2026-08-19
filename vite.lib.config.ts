@@ -26,6 +26,7 @@ export default defineConfig({
         '@tiptap/extension-placeholder',
         '@tiptap/extension-typography',
         '@tiptap/extension-link',
+        '@tiptap/extension-underline',
         '@tiptap/pm',
       ],
       output: {

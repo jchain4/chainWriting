@@ -2,27 +2,40 @@
   chain-writing — editor styles
   Import in your app: import 'chain-writing/style.css'
 
-  Theming: set these CSS variables on a parent element or .cw-editor
-  to override the bubble menu appearance without touching library code.
+  All bubble colours are CSS variables — override on .cw-editor or any
+  ancestor to re-theme without touching library code.
 */
 
+/* ── Token defaults ── */
+
 .cw-editor {
-  /* Bubble menu tokens — override these to match your design */
   --cw-bubble-bg:          #18181b;
-  --cw-bubble-border:      #27272a;
-  --cw-bubble-shadow:      0 4px 16px rgba(0, 0, 0, 0.35);
-  --cw-bubble-text:        #a1a1aa;
-  --cw-bubble-text-active: #f4f4f5;
-  --cw-bubble-hover-bg:    #27272a;
-  --cw-bubble-active-bg:   #3f3f46;
-  --cw-bubble-divider:     #3f3f46;
+  --cw-bubble-border:      rgba(255, 255, 255, 0.08);
+  --cw-bubble-shadow:      0 8px 24px rgba(0, 0, 0, 0.45),
+                           0 2px 6px  rgba(0, 0, 0, 0.3);
+  --cw-bubble-text:        rgba(255, 255, 255, 0.45);
+  --cw-bubble-text-hover:  rgba(255, 255, 255, 0.9);
+  --cw-bubble-text-active: #e8e6e3;
+  --cw-bubble-hover-bg:    rgba(255, 255, 255, 0.07);
+  --cw-bubble-active-bg:   rgba(255, 255, 255, 0.14);
+  --cw-bubble-divider:     rgba(255, 255, 255, 0.1);
 
-  /* Placeholder token */
-  --cw-placeholder-color:  currentColor;
+  --cw-placeholder-color:   currentColor;
   --cw-placeholder-opacity: 0.35;
+  --cw-link-color:          currentColor;
+}
 
-  /* Link token */
-  --cw-link-color: currentColor;
+/* ── Bubble menu entry animation ── */
+
+@keyframes cw-bubble-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(5px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0px) scale(1);
+  }
 }
 
 /* ── Bubble menu ── */
@@ -34,27 +47,38 @@
   border: 1px solid var(--cw-bubble-border);
   box-shadow: var(--cw-bubble-shadow);
   padding: 3px 4px;
-  gap: 1px;
+  gap: 0;
   z-index: 100;
-  transform: translateX(-50%);
+  border-radius: 0;
+  animation: cw-bubble-in 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .cw-bubble-menu {
+    animation: none;
+    transform: translateX(-50%);
+  }
+}
+
+/* Base button */
 
 .cw-bubble-menu button {
   background: none;
   border: none;
   color: var(--cw-bubble-text);
   cursor: pointer;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  padding: 4px 7px;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  padding: 5px 8px;
   line-height: 1;
-  border-radius: 2px;
-  transition: color 0.12s, background 0.12s;
+  border-radius: 0;
+  transition: color 0.1s, background 0.1s;
+  white-space: nowrap;
 }
 
 .cw-bubble-menu button:hover {
-  color: var(--cw-bubble-text-active);
+  color: var(--cw-bubble-text-hover);
   background: var(--cw-bubble-hover-bg);
 }
 
@@ -63,11 +87,73 @@
   background: var(--cw-bubble-active-bg);
 }
 
+/* Self-formatting labels — the button shows its own format */
+
+.cw-bubble-menu button[data-format="bold"] {
+  font-weight: 700;
+}
+
+.cw-bubble-menu button[data-format="italic"] {
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+.cw-bubble-menu button[data-format="underline"] {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: var(--cw-bubble-text);
+  transition: color 0.1s, background 0.1s, text-decoration-color 0.1s;
+}
+
+.cw-bubble-menu button[data-format="underline"]:hover {
+  text-decoration-color: var(--cw-bubble-text-hover);
+}
+
+.cw-bubble-menu button[data-format="strike"] {
+  text-decoration: line-through;
+  text-decoration-color: var(--cw-bubble-text);
+  transition: color 0.1s, background 0.1s, text-decoration-color 0.1s;
+}
+
+.cw-bubble-menu button[data-format="strike"]:hover {
+  text-decoration-color: var(--cw-bubble-text-hover);
+}
+
+/* Heading buttons: size encodes hierarchy */
+
+.cw-bubble-menu button[data-format="h2"] {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.cw-bubble-menu button[data-format="h3"] {
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+/* Blockquote button: typographic left quote, slightly larger */
+
+.cw-bubble-menu button[data-format="blockquote"] {
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 0.9;
+  padding-bottom: 7px;
+}
+
+/* Link button */
+
+.cw-bubble-menu button[data-format="link"] {
+  font-size: 12px;
+}
+
+/* Divider */
+
 .cw-bubble-menu__divider {
   width: 1px;
-  height: 16px;
+  height: 14px;
   background: var(--cw-bubble-divider);
-  margin: 0 3px;
+  margin: 0 2px;
   flex-shrink: 0;
 }
 
@@ -87,8 +173,6 @@
 
 .ProseMirror {
   outline: none;
-  /* Inherit everything from the host container so the editor
-     blends into the page's typography without imposing its own */
   font: inherit;
   color: inherit;
   line-height: inherit;

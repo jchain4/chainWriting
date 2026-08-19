@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
+import Underline from '@tiptap/extension-underline'
 import Placeholder from '@tiptap/extension-placeholder'
 import Typography from '@tiptap/extension-typography'
 import type { Editor as TiptapEditor } from '@tiptap/react'
@@ -27,7 +28,7 @@ function useBubblePos(editor: TiptapEditor | null) {
       if (!sel || sel.rangeCount === 0) { setCoords(null); return }
       const rect = sel.getRangeAt(0).getBoundingClientRect()
       if (!rect.width) { setCoords(null); return }
-      const bubbleH = 44
+      const bubbleH = 36
       const gap = 8
       const top = rect.top - bubbleH - gap >= 0 ? rect.top - bubbleH - gap : rect.bottom + gap
       setCoords({ top, left: rect.left + rect.width / 2 })
@@ -48,7 +49,7 @@ function promptLink(editor: TiptapEditor) {
   }
   const previous = editor.getAttributes('link').href as string | undefined
   const url = window.prompt('URL del enlace:', previous ?? 'https://')
-  if (url === null) return // cancelled
+  if (url === null) return
   if (url.trim() === '') {
     editor.chain().focus().unsetLink().run()
   } else {
@@ -60,9 +61,16 @@ function BubbleToolbar({ editor }: { editor: TiptapEditor }) {
   const coords = useBubblePos(editor)
   if (!coords) return null
 
-  const btn = (label: string, active: boolean, action: () => void, title: string) => (
+  const btn = (
+    label: string,
+    format: string,
+    active: boolean,
+    action: () => void,
+    title: string,
+  ) => (
     <button
-      key={label}
+      key={format}
+      data-format={format}
       className={active ? 'is-active' : ''}
       onMouseDown={(e) => { e.preventDefault(); action() }}
       title={title}
@@ -71,18 +79,21 @@ function BubbleToolbar({ editor }: { editor: TiptapEditor }) {
     </button>
   )
 
+  const sep = () => <div className="cw-bubble-menu__divider" />
+
   return (
     <div className="cw-bubble-menu" style={{ position: 'fixed', top: coords.top, left: coords.left }}>
-      {btn('B', editor.isActive('bold'), () => editor.chain().focus().toggleBold().run(), 'Negrita (Ctrl+B)')}
-      {btn('I', editor.isActive('italic'), () => editor.chain().focus().toggleItalic().run(), 'Cursiva (Ctrl+I)')}
-      {btn('S', editor.isActive('strike'), () => editor.chain().focus().toggleStrike().run(), 'Tachado')}
-      <div className="cw-bubble-menu__divider" />
-      {btn('H2', editor.isActive('heading', { level: 2 }), () => editor.chain().focus().toggleHeading({ level: 2 }).run(), 'Encabezado 2')}
-      {btn('H3', editor.isActive('heading', { level: 3 }), () => editor.chain().focus().toggleHeading({ level: 3 }).run(), 'Encabezado 3')}
-      <div className="cw-bubble-menu__divider" />
-      {btn('"', editor.isActive('blockquote'), () => editor.chain().focus().toggleBlockquote().run(), 'Cita')}
-      <div className="cw-bubble-menu__divider" />
-      {btn('↗', editor.isActive('link'), () => promptLink(editor), 'Enlace (Ctrl+K)')}
+      {btn('B', 'bold',      editor.isActive('bold'),      () => editor.chain().focus().toggleBold().run(),      'Negrita (Ctrl+B)')}
+      {btn('I', 'italic',    editor.isActive('italic'),    () => editor.chain().focus().toggleItalic().run(),    'Cursiva (Ctrl+I)')}
+      {btn('U', 'underline', editor.isActive('underline'), () => editor.chain().focus().toggleUnderline().run(), 'Subrayado (Ctrl+U)')}
+      {btn('S', 'strike',    editor.isActive('strike'),    () => editor.chain().focus().toggleStrike().run(),    'Tachado')}
+      {sep()}
+      {btn('H2', 'h2', editor.isActive('heading', { level: 2 }), () => editor.chain().focus().toggleHeading({ level: 2 }).run(), 'Encabezado 2')}
+      {btn('H3', 'h3', editor.isActive('heading', { level: 3 }), () => editor.chain().focus().toggleHeading({ level: 3 }).run(), 'Encabezado 3')}
+      {sep()}
+      {btn('"', 'blockquote', editor.isActive('blockquote'), () => editor.chain().focus().toggleBlockquote().run(), 'Cita')}
+      {sep()}
+      {btn('↗', 'link', editor.isActive('link'), () => promptLink(editor), 'Enlace (Ctrl+K)')}
     </div>
   )
 }
@@ -112,6 +123,7 @@ export function Editor({
   const editor = useEditor({
     extensions: [
       StarterKit,
+      Underline,
       Link.configure({ openOnClick: false, autolink: true }),
       Placeholder.configure({ placeholder }),
       Typography,

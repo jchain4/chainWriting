@@ -228,28 +228,7 @@ body {
   opacity: 1;
 }
 
-/* ── Bubble menu (app-level overrides for font pairing) ── */
-
-.cw-bubble-menu button:nth-child(1),
-.cw-bubble-menu button:nth-child(2),
-.cw-bubble-menu button:nth-child(3) {
-  font-family: var(--font-sans);
-}
-
-.cw-bubble-menu button:nth-child(5),
-.cw-bubble-menu button:nth-child(6) {
-  font-family: var(--font-serif);
-  font-size: 12px;
-}
-
-.cw-bubble-menu button:nth-child(8) {
-  font-family: var(--font-serif);
-  font-size: 14px;
-  font-style: italic;
-}
-
-/* Placeholder color override */
-
+/* Placeholder color override for the demo */
 .ProseMirror p.is-editor-empty:first-child::before {
   color: var(--color-text-muted);
 }
