@@ -37,6 +37,36 @@ export function htmlToMarkdown(html: string): string {
   md = md.replace(/<s[^>]*>([\s\S]*?)<\/s>/gi, (_, c) => `~~${c}~~`)
   md = md.replace(/<code[^>]*>([\s\S]*?)<\/code>/gi, (_, c) => `\`${decodeEntities(c)}\``)
 
+  // Images — block-level (Image is configured with inline: false), never
+  // nested inside a <p>. alt/title are omitted from the HTML entirely when
+  // unset, so both attributes are looked up independently rather than
+  // assuming a fixed attribute order.
+  md = md.replace(/<img\b([^>]*)>/gi, (_, attrs) => {
+    const src = /\bsrc="([^"]*)"/i.exec(attrs)?.[1] ?? ''
+    const alt = /\balt="([^"]*)"/i.exec(attrs)?.[1] ?? ''
+    return src ? `![${decodeEntities(alt)}](${src})\n\n` : ''
+  })
+
+  // Tables → GFM pipe tables. Runs after inline formatting above, so cell
+  // text already has **bold**/*italic* as literal characters by the time
+  // it's extracted here (unlike blockquote, extracted before inline
+  // formatting — a pre-existing quirk, not touched here). Multi-block
+  // cells aren't supported by pipe tables, so internal newlines collapse
+  // to spaces — an accepted limitation of the format.
+  md = md.replace(/<table[^>]*>([\s\S]*?)<\/table>/gi, (_, inner) => {
+    const rows = [...(inner as string).matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)].map(([, rowHtml]) =>
+      [...rowHtml.matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi)].map(([, cellHtml]) =>
+        stripTags(cellHtml).trim().replace(/\|/g, '\\|').replace(/\s*\n\s*/g, ' ')
+      )
+    )
+    if (rows.length === 0) return ''
+    const colCount = rows[0].length
+    const header = `| ${rows[0].join(' | ')} |`
+    const divider = `| ${Array(colCount).fill('---').join(' | ')} |`
+    const body = rows.slice(1).map((r) => `| ${r.join(' | ')} |`).join('\n')
+    return `${header}\n${divider}\n${body ? body + '\n' : ''}\n`
+  })
+
   // Lists
   md = md.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (_, c) => `- ${stripTags(c).trim()}\n`)
   md = md.replace(/<[uo]l[^>]*>([\s\S]*?)<\/[uo]l>/gi, (_, c) => c + '\n')

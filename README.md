@@ -14,6 +14,7 @@ Embeddable rich-text editor component for long-form writing. Built with Tiptap v
 - **Bubble menu** — appears on text selection with animated frosted-glass design; self-formatting labels (B is bold, I is italic, etc.)
 - **Keyboard shortcuts** — Ctrl+B/I/U, Ctrl+K for links, Tab trapped inside editor
 - **Typewriter mode** — cursor stays vertically centered while typing
+- **Rich content** — images (by URL or file upload) and tables, inserted via a `/` slash-command menu
 - **Stateless** — Editor holds no storage; the host app receives HTML via `onChange`
 - **Themeable** — all visual tokens as CSS variables on `.cw-editor`; typography inherited from host via `font: inherit`
 
@@ -28,9 +29,12 @@ pnpm add chain-writing
 `chain-writing` builds on Tiptap v3 and React — install the required peers alongside it (versions per the `peerDependencies` in `package.json`):
 
 ```bash
-npm install @tiptap/react @tiptap/pm @tiptap/starter-kit \
+npm install @tiptap/react @tiptap/core @tiptap/pm @tiptap/starter-kit \
   @tiptap/extension-link @tiptap/extension-underline \
-  @tiptap/extension-placeholder @tiptap/extension-typography
+  @tiptap/extension-placeholder @tiptap/extension-typography \
+  @tiptap/extension-image @tiptap/extension-table \
+  @tiptap/extension-table-row @tiptap/extension-table-cell \
+  @tiptap/extension-table-header @tiptap/suggestion
 ```
 
 ## Usage
@@ -60,6 +64,7 @@ function App() {
 | `className` | `string` | — | Extra class on `.cw-editor` for scoped CSS variable overrides |
 | `extensions` | `AnyExtension[]` | — | Extra Tiptap extensions merged into the built-in set — see "Customizing extensions" |
 | `onChange` | `(html: string) => void` | — | Called on every content change |
+| `onImageUpload` | `(file: File) => Promise<string>` | — | Enables file-based image insertion — see "Rich content" |
 | `ref` | `Ref<EditorHandle>` | — | Imperative handle — see "Imperative API" |
 
 ## Imperative API
@@ -113,6 +118,27 @@ import { MyMention } from './my-mention'
 
 `extensions` (like `initialContent`) is read once at construction — changing it after the first render has no effect on the live editor.
 
+## Rich content
+
+Type `/` at the start of an empty line to open a command menu with two entries: **Imagen** and **Tabla**.
+
+**Images** can always be inserted by URL. To also enable inserting from a local file (via the upload button in the image popover, or by dragging/pasting an image file directly into the editor), pass `onImageUpload`:
+
+```tsx
+<Editor
+  onImageUpload={async (file) => {
+    const url = await myUploadToS3(file) // upload however you like
+    return url
+  }}
+/>
+```
+
+The image is inserted immediately with a local preview and swapped for the real URL once the promise resolves (or removed if it rejects). Without `onImageUpload`, dropped/pasted image files are ignored rather than silently embedded as base64 — only URL-based insertion works.
+
+Pasted HTML containing images (e.g. from Google Docs) is parsed independently of `onImageUpload`, since it arrives as `<img>` markup rather than a raw file. Word's clipboard often references images by local file path, which won't resolve in the browser — the rest of a Word paste (text, tables) is unaffected.
+
+**Tables** come with a small contextual toolbar (add/remove row or column, delete table) that appears whenever the cursor is inside one.
+
 ## Server-side rendering / Next.js
 
 The component already includes a `'use client'` directive and sets `immediatelyRender: false` internally, so it's safe to import into an SSR framework (Next.js App Router, Astro, etc.) without hydration warnings — just make sure it's rendered from within a client boundary, and import `chain-writing/style.css` once (e.g. in the root layout).
@@ -128,6 +154,9 @@ Override any CSS variable on `.cw-editor` or a parent selector:
   --cw-link-color:      #4f46e5;
   --cw-placeholder-color:   currentColor;
   --cw-placeholder-opacity: 0.3;
+  --cw-table-border:           rgba(0, 0, 0, 0.12);
+  --cw-table-header-bg:        rgba(0, 0, 0, 0.04);
+  --cw-table-cell-selected-bg: rgba(99, 102, 241, 0.15);
 }
 ```
 
@@ -150,7 +179,7 @@ The repo serves two purposes:
 ## Stack
 
 - Vite 8 + React 19 + TypeScript 6
-- Tiptap v3 (StarterKit, Placeholder, Typography)
+- Tiptap v3 (StarterKit, Placeholder, Typography, Image, Table, Suggestion)
 - idb-keyval (demo app only)
 
 ## Roadmap

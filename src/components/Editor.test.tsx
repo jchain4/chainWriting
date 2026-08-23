@@ -69,4 +69,43 @@ describe('Editor', () => {
     expect(names).toContain('testMark')
     expect(names).toContain('bold')
   })
+
+  it('registers image, table, and slash-command extensions by default', async () => {
+    const { ref } = await renderReadyEditor()
+    const names = ref.current!.getEditor()!.extensionManager.extensions.map((e) => e.name)
+    expect(names).toEqual(expect.arrayContaining([
+      'image', 'table', 'tableRow', 'tableCell', 'tableHeader', 'slashCommand',
+    ]))
+  })
+
+  it('inserts an image by URL via the setImage command', async () => {
+    const { ref } = await renderReadyEditor()
+    ref.current!.getEditor()!.chain().focus().setImage({ src: 'https://x/a.png', alt: 'A' }).run()
+    const html = ref.current!.getHTML()
+    expect(html).toContain('<img')
+    expect(html).toContain('src="https://x/a.png"')
+  })
+
+  it('inserts a table and supports adding/removing rows and columns', async () => {
+    const { ref } = await renderReadyEditor()
+    const editor = ref.current!.getEditor()!
+
+    editor.chain().focus().insertTable({ rows: 2, cols: 2, withHeaderRow: true }).run()
+    let html = ref.current!.getHTML()
+    expect(html).toContain('<table')
+    expect((html.match(/<tr/g) ?? []).length).toBe(2)
+    expect((html.match(/<td|<th/g) ?? []).length).toBe(4)
+
+    editor.chain().focus().addRowAfter().run()
+    editor.chain().focus().addColumnAfter().run()
+    html = ref.current!.getHTML()
+    expect((html.match(/<tr/g) ?? []).length).toBe(3)
+
+    editor.chain().focus().deleteRow().run()
+    html = ref.current!.getHTML()
+    expect((html.match(/<tr/g) ?? []).length).toBe(2)
+
+    editor.chain().focus().deleteTable().run()
+    expect(ref.current!.getHTML()).not.toContain('<table')
+  })
 })

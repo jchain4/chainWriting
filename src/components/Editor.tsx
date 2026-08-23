@@ -5,8 +5,16 @@ import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Typography from '@tiptap/extension-typography'
+import { Table } from '@tiptap/extension-table'
+import TableRow from '@tiptap/extension-table-row'
+import TableCell from '@tiptap/extension-table-cell'
+import TableHeader from '@tiptap/extension-table-header'
+import { TextSelection } from '@tiptap/pm/state'
 import type { AnyExtension, Content, Editor as TiptapEditor, JSONContent } from '@tiptap/react'
 import { mergeExtensions } from '../lib/extensions'
+import { UploadableImage } from '../lib/imageExtension'
+import { insertImageWithUpload } from '../lib/imageUpload'
+import { SlashCommand, type SlashCommandItem, type SlashCommandState, type SlashKeyHandler } from '../lib/slashCommandExtension'
 import '../editor.css'
 
 export interface EditorProps {
@@ -25,6 +33,14 @@ export interface EditorProps {
    */
   extensions?: AnyExtension[]
   onChange?: (html: string) => void
+  /**
+   * Enables file-based image insertion (the upload button in the image
+   * popover, plus dropping/pasting raw image files). Receives the file and
+   * must resolve to the URL to embed. Without this prop, only URL-based
+   * image insertion is available — dropped/pasted image files are ignored
+   * rather than silently embedded as base64.
+   */
+  onImageUpload?: (file: File) => Promise<string>
 }
 
 export interface EditorHandle {
@@ -213,6 +229,198 @@ function LinkPopover({
   )
 }
 
+// ── Slash command menu ──────────────────────────────────────────────────────
+
+const SlashMenu = forwardRef<SlashKeyHandler, {
+  items: SlashCommandItem[]
+  coords: { top: number; left: number }
+  onSelect: (item: SlashCommandItem) => void
+  onClose: () => void
+}>(function SlashMenu({ items, coords, onSelect, onClose }, ref) {
+  const [selected, setSelected] = useState(0)
+
+  // Reset the highlighted item whenever the filtered list changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setSelected(0) }, [items])
+
+  useImperativeHandle(ref, () => ({
+    onKeyDown: (event) => {
+      if (event.key === 'Escape') { onClose(); return true }
+      if (items.length === 0) return false
+      if (event.key === 'ArrowDown') { setSelected((i) => (i + 1) % items.length); return true }
+      if (event.key === 'ArrowUp') { setSelected((i) => (i - 1 + items.length) % items.length); return true }
+      if (event.key === 'Enter') { onSelect(items[selected]); return true }
+      return false
+    },
+  }), [items, selected, onSelect, onClose])
+
+  return (
+    <div className="cw-slash-menu" style={{ position: 'fixed', top: coords.top, left: coords.left }}>
+      {items.length === 0 ? (
+        <div className="cw-slash-menu__empty">Sin resultados</div>
+      ) : (
+        items.map((item, i) => (
+          <button
+            key={item.id}
+            className={i === selected ? 'is-active' : ''}
+            tabIndex={-1}
+            onPointerEnter={() => setSelected(i)}
+            onPointerDown={(e) => { e.preventDefault(); onSelect(item) }}
+          >
+            {item.label}
+          </button>
+        ))
+      )}
+    </div>
+  )
+})
+
+// ── Table toolbar ───────────────────────────────────────────────────────────
+
+// Unlike useBubblePos (which bails on an empty/collapsed selection), the
+// cursor inside a table cell is usually just a caret — so this tracks
+// editor.isActive('table') instead of selection range, and also recomputes
+// on every transaction since row/column changes move the table's position.
+function useTableToolbarPos(editor: TiptapEditor | null) {
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null)
+
+  useEffect(() => {
+    if (!editor) return
+    const update = () => {
+      if (!editor.isActive('table')) { setCoords(null); return }
+      try {
+        const domAtPos = editor.view.domAtPos(editor.state.selection.from).node
+        const el = domAtPos.nodeType === 1 ? (domAtPos as HTMLElement) : domAtPos.parentElement
+        const tableEl = el?.closest('table')
+        if (!tableEl) { setCoords(null); return }
+        const rect = tableEl.getBoundingClientRect()
+        setCoords({ top: rect.top - 40, left: rect.left })
+      } catch {
+        setCoords(null)
+      }
+    }
+    editor.on('selectionUpdate', update)
+    editor.on('transaction', update)
+    return () => {
+      editor.off('selectionUpdate', update)
+      editor.off('transaction', update)
+    }
+  }, [editor])
+
+  return coords
+}
+
+function TableToolbar({ editor }: { editor: TiptapEditor }) {
+  const coords = useTableToolbarPos(editor)
+  if (!coords) return null
+
+  const btn = (label: string, title: string, action: () => void) => (
+    <button
+      key={title}
+      tabIndex={-1}
+      title={title}
+      onPointerDown={(e) => { e.preventDefault(); action() }}
+    >
+      {label}
+    </button>
+  )
+
+  return (
+    <div className="cw-bubble-menu cw-table-menu" style={{ position: 'fixed', top: coords.top, left: coords.left }}>
+      {btn('+Fila', 'Añadir fila', () => editor.chain().focus().addRowAfter().run())}
+      {btn('+Col', 'Añadir columna', () => editor.chain().focus().addColumnAfter().run())}
+      <div className="cw-bubble-menu__divider" />
+      {btn('−Fila', 'Eliminar fila', () => editor.chain().focus().deleteRow().run())}
+      {btn('−Col', 'Eliminar columna', () => editor.chain().focus().deleteColumn().run())}
+      <div className="cw-bubble-menu__divider" />
+      {btn('✕', 'Eliminar tabla', () => editor.chain().focus().deleteTable().run())}
+    </div>
+  )
+}
+
+// ── Image insert popover ────────────────────────────────────────────────────
+
+interface ImageInsertState {
+  top: number
+  left: number
+}
+
+function ImageInsertPopover({
+  state,
+  canUpload,
+  onInsertUrl,
+  onUploadClick,
+  onClose,
+}: {
+  state: ImageInsertState
+  canUpload: boolean
+  onInsertUrl: (url: string) => void
+  onUploadClick: () => void
+  onClose: () => void
+}) {
+  const [url, setUrl] = useState('')
+  const ref = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    inputRef.current?.focus()
+  }, [])
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        onClose()
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [onClose])
+
+  const submit = () => {
+    const trimmed = url.trim()
+    if (trimmed) onInsertUrl(trimmed)
+  }
+
+  return (
+    <div
+      ref={ref}
+      className="cw-link-popover"
+      style={{ top: state.top, left: state.left }}
+    >
+      <input
+        ref={inputRef}
+        type="url"
+        value={url}
+        className="cw-link-input"
+        placeholder="https://…"
+        onChange={(e) => setUrl(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); submit() }
+          if (e.key === 'Escape') { e.preventDefault(); onClose() }
+        }}
+      />
+      <button
+        className="cw-link-btn cw-link-apply"
+        title="Insertar (Enter)"
+        tabIndex={-1}
+        onPointerDown={(e) => { e.preventDefault(); submit() }}
+      >
+        ↵
+      </button>
+      {canUpload && (
+        <button
+          className="cw-link-btn"
+          title="Subir archivo"
+          tabIndex={-1}
+          onPointerDown={(e) => { e.preventDefault(); onUploadClick() }}
+        >
+          ⤒
+        </button>
+      )}
+    </div>
+  )
+}
+
 // ── Editor ──────────────────────────────────────────────────────────────────
 
 export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
@@ -222,9 +430,39 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   className,
   extensions,
   onChange,
+  onImageUpload,
 }, ref) {
   const rafRef = useRef<number | null>(null)
   const [linkState, setLinkState] = useState<LinkPopoverState | null>(null)
+  const [imageInsertState, setImageInsertState] = useState<ImageInsertState | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [slashState, setSlashState] = useState<SlashCommandState | null>(null)
+  const slashMenuHandleRef = useRef<SlashKeyHandler>(null)
+
+  const slashItems = useMemo<SlashCommandItem[]>(() => [
+    {
+      id: 'image',
+      label: 'Imagen',
+      execute: ({ editor, range }) => {
+        editor.chain().focus().deleteRange(range).run()
+        const coords = editor.view.coordsAtPos(editor.state.selection.from)
+        setImageInsertState({ top: coords.bottom + 8, left: coords.left })
+      },
+    },
+    {
+      id: 'table',
+      label: 'Tabla',
+      execute: ({ editor, range }) => {
+        editor.chain().focus().deleteRange(range).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
+      },
+    },
+  ], [])
+
+  const slashExtension = useMemo(() => SlashCommand.configure({
+    items: slashItems,
+    onStateChange: setSlashState,
+    getKeyHandler: () => slashMenuHandleRef.current,
+  }), [slashItems])
 
   const scrollToCursor = useCallback((editor: TiptapEditor) => {
     if (!typewriterMode) return
@@ -247,11 +485,17 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
         }),
         Placeholder.configure({ placeholder }),
         Typography,
+        UploadableImage.configure({ inline: false, allowBase64: true }),
+        Table.configure({ resizable: true }),
+        TableRow,
+        TableCell,
+        TableHeader,
+        slashExtension,
       ],
       extensions,
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [placeholder],
+    [placeholder, slashExtension],
   )
 
   const editor = useEditor({
@@ -269,6 +513,35 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
         }
         return false
       },
+      // Raw image files (a real file drag, or an OS-level file copy) are only
+      // ever embedded via the host-provided onImageUpload callback — never as
+      // base64. Without it, dropped/pasted files are left alone. Clipboard
+      // HTML containing <img src="data:..."> (e.g. Google Docs paste) is a
+      // separate path handled by ProseMirror's default HTML-paste parsing
+      // via UploadableImage's own parseHTML rule (allowBase64: true above).
+      handlePaste: (_view, event) => {
+        if (!onImageUpload) return false
+        const files = Array.from(event.clipboardData?.files ?? [])
+          .filter((f) => f.type.startsWith('image/'))
+        if (files.length === 0) return false
+        event.preventDefault()
+        files.forEach((file) => handleImageFile(file))
+        return true
+      },
+      handleDrop: (view, event) => {
+        if (!onImageUpload) return false
+        const files = Array.from(event.dataTransfer?.files ?? [])
+          .filter((f) => f.type.startsWith('image/'))
+        if (files.length === 0) return false
+        event.preventDefault()
+        const coords = view.posAtCoords({ left: event.clientX, top: event.clientY })
+        if (coords) {
+          const { tr } = view.state
+          view.dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(coords.pos))))
+        }
+        files.forEach((file) => handleImageFile(file))
+        return true
+      },
     },
     onUpdate: ({ editor }) => {
       onChange?.(editor.getHTML())
@@ -278,6 +551,16 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
       scrollToCursor(editor)
     },
   })
+
+  const handleImageFile = useCallback((file: File) => {
+    if (!editor || !onImageUpload) return
+    insertImageWithUpload(editor, file, onImageUpload)
+  }, [editor, onImageUpload])
+
+  const insertImageUrl = useCallback((url: string) => {
+    editor?.chain().focus().setImage({ src: url }).run()
+    setImageInsertState(null)
+  }, [editor])
 
   const openLink = useCallback((ed: TiptapEditor) => {
     const { from, to } = ed.state.selection
@@ -346,6 +629,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
           onLinkClick={openLink}
         />
       )}
+      {editor && <TableToolbar editor={editor} />}
       {linkState && (
         <LinkPopover
           state={linkState}
@@ -353,6 +637,36 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
           onClose={() => setLinkState(null)}
         />
       )}
+      {slashState?.coords && (
+        <SlashMenu
+          ref={slashMenuHandleRef}
+          items={slashState.items}
+          coords={slashState.coords}
+          onSelect={(item) => slashState.select(item)}
+          onClose={() => setSlashState(null)}
+        />
+      )}
+      {imageInsertState && (
+        <ImageInsertPopover
+          state={imageInsertState}
+          canUpload={!!onImageUpload}
+          onInsertUrl={insertImageUrl}
+          onUploadClick={() => fileInputRef.current?.click()}
+          onClose={() => setImageInsertState(null)}
+        />
+      )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          if (file) handleImageFile(file)
+          e.target.value = ''
+          setImageInsertState(null)
+        }}
+      />
       <EditorContent editor={editor} />
     </div>
   )

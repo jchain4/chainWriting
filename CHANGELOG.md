@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Rich content: images (by URL or file upload via a new `onImageUpload` prop) and tables, inserted via a `/` slash-command menu.
+- Contextual table toolbar (add/remove row or column, delete table) shown whenever the cursor is inside a table.
+- `--cw-table-border`, `--cw-table-header-bg`, `--cw-table-cell-selected-bg` theming tokens.
+- Pasting HTML containing images or tables (e.g. from Google Docs) is now preserved instead of being flattened to plain text.
+- `htmlToMarkdown` now converts images and tables to their Markdown equivalents.
 
 ## [0.2.0] - 2026-08-23
 

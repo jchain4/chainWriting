@@ -16,18 +16,14 @@ export default defineConfig({
       fileName: (format) => `index.${format === 'es' ? 'mjs' : 'cjs'}`,
     },
     rollupOptions: {
-      external: [
-        'react',
-        'react-dom',
-        'react/jsx-runtime',
-        '@tiptap/react',
-        '@tiptap/starter-kit',
-        '@tiptap/extension-placeholder',
-        '@tiptap/extension-typography',
-        '@tiptap/extension-link',
-        '@tiptap/extension-underline',
-        '@tiptap/pm',
-      ],
+      // A matcher function (not a fixed string list) so subpath imports
+      // like `@tiptap/pm/state` are externalized too — a plain string in
+      // the array only matches that exact specifier, not its subpaths.
+      external: (id) =>
+        id === 'react' ||
+        id === 'react-dom' ||
+        id === 'react/jsx-runtime' ||
+        id.startsWith('@tiptap/'),
       output: {
         globals: {
           react: 'React',
