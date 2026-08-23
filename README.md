@@ -1,5 +1,9 @@
 # chain-writing
 
+[![npm version](https://img.shields.io/npm/v/chain-writing)](https://www.npmjs.com/package/chain-writing)
+[![CI](https://img.shields.io/github/actions/workflow/status/jchain4/chainWriting/ci.yml?branch=main)](https://github.com/jchain4/chainWriting/actions/workflows/ci.yml)
+[![license](https://img.shields.io/npm/l/chain-writing)](https://github.com/jchain4/chainWriting/blob/main/LICENSE)
+
 Embeddable rich-text editor component for long-form writing. Built with Tiptap v3 + React 19, designed to integrate with any host app through CSS variables and a stateless `onChange` API.
 
 ## Features

@@ -1,9 +1,21 @@
 {
   "name": "chain-writing",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "packageManager": "pnpm@11.1.2",
   "description": "Embeddable rich-text editor component built on Tiptap",
+  "license": "MIT",
+  "author": "Juan González",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jchain4/chainWriting.git"
+  },
+  "homepage": "https://github.com/jchain4/chainWriting#readme",
+  "bugs": {
+    "url": "https://github.com/jchain4/chainWriting/issues"
+  },
+  "keywords": ["editor", "rich-text", "wysiwyg", "tiptap", "react", "prosemirror"],
+  "sideEffects": ["**/*.css"],
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

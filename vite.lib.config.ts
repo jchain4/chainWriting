@@ -5,6 +5,9 @@ import react from '@vitejs/plugin-react'
 // (see the `build:lib` script) rather than through a Vite plugin.
 export default defineConfig({
   plugins: [react()],
+  // Don't copy public/ (demo-app-only assets like favicon.svg/icons.svg)
+  // into the published library tarball.
+  publicDir: false,
   build: {
     lib: {
       entry: 'src/index.ts',
