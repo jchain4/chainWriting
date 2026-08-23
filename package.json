@@ -2,13 +2,16 @@
   "name": "chain-writing",
   "version": "0.1.0",
   "type": "module",
+  "packageManager": "pnpm@11.1.2",
   "description": "Embeddable rich-text editor component built on Tiptap",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "build:lib": "tsc -b && vite build --config vite.lib.config.ts",
+    "build:lib": "tsc -b && vite build --config vite.lib.config.ts && tsc -p tsconfig.lib.json",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "exports": {
     ".": {
@@ -19,36 +22,41 @@
     "./style.css": "./dist/chain-writing.css"
   },
   "types": "./dist/index.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "peerDependencies": {
-    "@tiptap/extension-link":      ">=3",
+    "@tiptap/extension-link": ">=3",
     "@tiptap/extension-placeholder": ">=3",
-    "@tiptap/extension-typography":  ">=3",
-    "@tiptap/extension-underline":   ">=3",
-    "@tiptap/pm":                  ">=3",
-    "@tiptap/react":               ">=3",
-    "@tiptap/starter-kit":         ">=3",
-    "react":                       ">=18",
-    "react-dom":                   ">=18"
+    "@tiptap/extension-typography": ">=3",
+    "@tiptap/extension-underline": ">=3",
+    "@tiptap/pm": ">=3",
+    "@tiptap/react": ">=3",
+    "@tiptap/starter-kit": ">=3",
+    "react": ">=18",
+    "react-dom": ">=18"
   },
   "devDependencies": {
-    "@tiptap/extension-link":        "^3.30.2",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.2",
+    "@tiptap/extension-link": "^3.30.2",
     "@tiptap/extension-placeholder": "^3.30.1",
-    "@tiptap/extension-typography":  "^3.30.1",
-    "@tiptap/extension-underline":   "^3.30.2",
-    "@tiptap/pm":                    "^3.30.1",
-    "@tiptap/react":                 "^3.30.1",
-    "@tiptap/starter-kit":           "^3.30.1",
-    "@types/node":                   "^24.13.3",
-    "@types/react":                  "^19.2.17",
-    "@types/react-dom":              "^19.2.3",
-    "@vitejs/plugin-react":          "^6.0.4",
-    "idb-keyval":                    "^6.3.0",
-    "oxlint":                        "^1.75.0",
-    "react":                         "^19.2.8",
-    "react-dom":                     "^19.2.8",
-    "typescript":                    "~6.0.2",
-    "vite":                          "^8.2.0",
-    "vite-plugin-dts":               "^5.0.3"
+    "@tiptap/extension-typography": "^3.30.1",
+    "@tiptap/extension-underline": "^3.30.2",
+    "@tiptap/pm": "^3.30.1",
+    "@tiptap/react": "^3.30.1",
+    "@tiptap/starter-kit": "^3.30.1",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.4",
+    "idb-keyval": "^6.3.0",
+    "jsdom": "^30.0.1",
+    "oxlint": "^1.75.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.0",
+    "vitest": "^4.1.11"
   }
 }

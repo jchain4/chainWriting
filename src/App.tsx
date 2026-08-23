@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Editor } from './components/Editor'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Editor, type EditorHandle } from './components/Editor'
 import { Footer } from './components/Footer'
 import { Sidebar } from './components/Sidebar'
 import { useAutosave } from './hooks/useAutosave'
@@ -23,6 +23,7 @@ export default function App() {
   const [focusMode, setFocusMode] = useState(false)
   const [currentHtml, setCurrentHtml] = useState('')
   const [ready, setReady] = useState(false)
+  const editorRef = useRef<EditorHandle>(null)
 
   // Autosave: lives here in the demo app, not inside the Editor
   const { saved } = useAutosave(activeDoc?.id ?? '', currentHtml)
@@ -69,6 +70,7 @@ export default function App() {
     await setCurrentDocId(id)
     setActiveDoc(doc)
     setCurrentHtml(doc.content)
+    editorRef.current?.setContent(doc.content, { emitUpdate: false })
     setSidebarOpen(false)
   }, [])
 
@@ -77,6 +79,7 @@ export default function App() {
     await setCurrentDocId(doc.id)
     setActiveDoc(doc)
     setCurrentHtml(doc.content)
+    editorRef.current?.setContent(doc.content, { emitUpdate: false })
     await refreshDocs()
     setSidebarOpen(false)
   }, [refreshDocs])
@@ -91,6 +94,7 @@ export default function App() {
       await setCurrentDocId(next.id)
       setActiveDoc(next)
       setCurrentHtml(next.content)
+      editorRef.current?.setContent(next.content, { emitUpdate: false })
     }
   }, [activeDoc])
 
@@ -138,9 +142,8 @@ export default function App() {
         onClick={() => sidebarOpen && setSidebarOpen(false)}
       >
         <div className="editor-wrapper">
-          {/* key resets Tiptap when switching documents */}
           <Editor
-            key={activeDoc.id}
+            ref={editorRef}
             initialContent={activeDoc.content}
             placeholder="Empieza a escribir…"
             typewriterMode={typewriterMode}

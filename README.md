@@ -13,6 +13,22 @@ Embeddable rich-text editor component for long-form writing. Built with Tiptap v
 - **Stateless** — Editor holds no storage; the host app receives HTML via `onChange`
 - **Themeable** — all visual tokens as CSS variables on `.cw-editor`; typography inherited from host via `font: inherit`
 
+## Install
+
+```bash
+npm install chain-writing
+# or
+pnpm add chain-writing
+```
+
+`chain-writing` builds on Tiptap v3 and React — install the required peers alongside it (versions per the `peerDependencies` in `package.json`):
+
+```bash
+npm install @tiptap/react @tiptap/pm @tiptap/starter-kit \
+  @tiptap/extension-link @tiptap/extension-underline \
+  @tiptap/extension-placeholder @tiptap/extension-typography
+```
+
 ## Usage
 
 ```tsx
@@ -34,13 +50,70 @@ function App() {
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `initialContent` | `string` | `''` | Initial HTML content |
+| `initialContent` | `string` | `''` | Initial HTML content. Read once at construction — see "Imperative API" to load new content later |
 | `placeholder` | `string` | `'Start writing…'` | Placeholder text when empty |
 | `typewriterMode` | `boolean` | `false` | Keep cursor vertically centered |
 | `className` | `string` | — | Extra class on `.cw-editor` for scoped CSS variable overrides |
+| `extensions` | `AnyExtension[]` | — | Extra Tiptap extensions merged into the built-in set — see "Customizing extensions" |
 | `onChange` | `(html: string) => void` | — | Called on every content change |
+| `ref` | `Ref<EditorHandle>` | — | Imperative handle — see "Imperative API" |
 
-### Theming
+## Imperative API
+
+`Editor` forwards a ref exposing an `EditorHandle`:
+
+```tsx
+import { useRef } from 'react'
+import { Editor, type EditorHandle } from 'chain-writing'
+
+function App() {
+  const editorRef = useRef<EditorHandle>(null)
+
+  function loadDocument(html: string) {
+    // Replaces the whole document without remounting the editor —
+    // this is the correct replacement for remounting via key={doc.id}.
+    editorRef.current?.setContent(html, { emitUpdate: false })
+  }
+
+  return <Editor ref={editorRef} onChange={(html) => {/* ... */}} />
+}
+```
+
+| Method | Description |
+|--------|-------------|
+| `focus()` | Focus the editor |
+| `getHTML()` | Current content as HTML |
+| `getJSON()` | Current content as Tiptap JSON |
+| `setContent(content, options?)` | Replace the whole document — the correct way to load new content into a live editor |
+| `clear()` | Clear the whole document |
+| `isReady()` | Whether the underlying Tiptap editor has mounted |
+| `getEditor()` | Escape hatch — the raw Tiptap `Editor` instance, `null` until mounted |
+
+There is no reactive `content` prop: Tiptap never re-parses content on prop changes, so pushing new content into a live editor always goes through `ref.current.setContent(...)`.
+
+## Customizing extensions
+
+Pass extra Tiptap extensions via the `extensions` prop — they're merged into the built-in set (StarterKit + link/underline config, Placeholder, Typography). An extension whose name matches a built-in one (e.g. a reconfigured `StarterKit`) replaces it entirely:
+
+```tsx
+import StarterKit from '@tiptap/starter-kit'
+import { Editor } from 'chain-writing'
+import { MyMention } from './my-mention'
+
+// Add a custom mark/node
+<Editor extensions={[MyMention]} />
+
+// Reconfigure or disable parts of StarterKit
+<Editor extensions={[StarterKit.configure({ heading: false, codeBlock: false })]} />
+```
+
+`extensions` (like `initialContent`) is read once at construction — changing it after the first render has no effect on the live editor.
+
+## Server-side rendering / Next.js
+
+The component already includes a `'use client'` directive and sets `immediatelyRender: false` internally, so it's safe to import into an SSR framework (Next.js App Router, Astro, etc.) without hydration warnings — just make sure it's rendered from within a client boundary, and import `chain-writing/style.css` once (e.g. in the root layout).
+
+## Theming
 
 Override any CSS variable on `.cw-editor` or a parent selector:
 
@@ -61,6 +134,7 @@ Full token list is in `src/editor.css`.
 ```bash
 pnpm install
 pnpm dev          # demo app at localhost:5173
+pnpm test         # run the test suite
 pnpm build:lib    # builds library to dist/
 ```
 
@@ -74,3 +148,7 @@ The repo serves two purposes:
 - Vite 8 + React 19 + TypeScript 6
 - Tiptap v3 (StarterKit, Placeholder, Typography)
 - idb-keyval (demo app only)
+
+## Roadmap
+
+- **Framework-agnostic embed** — a Web Component wrapper so non-React sites (plain HTML, PHP, WordPress, etc.) can embed the editor via a `<script>` tag. Not built yet; the library is React-only today.

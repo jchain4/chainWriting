@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+'use client'
+
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Typography from '@tiptap/extension-typography'
-import type { Editor as TiptapEditor } from '@tiptap/react'
+import type { AnyExtension, Content, Editor as TiptapEditor, JSONContent } from '@tiptap/react'
+import { mergeExtensions } from '../lib/extensions'
 import '../editor.css'
 
 export interface EditorProps {
@@ -12,7 +15,37 @@ export interface EditorProps {
   typewriterMode?: boolean
   /** Extra class added to the root .cw-editor wrapper — use for scoped CSS variable overrides */
   className?: string
+  /**
+   * Extra Tiptap extensions merged into the built-in set (StarterKit + link/
+   * underline config, Placeholder, Typography). To reconfigure or disable
+   * parts of StarterKit (e.g. remove headings or code blocks), pass your own
+   * `StarterKit.configure({...})` here — it will replace the built-in one.
+   * Set once at construction time; changing this prop after mount has no
+   * effect on the live editor.
+   */
+  extensions?: AnyExtension[]
   onChange?: (html: string) => void
+}
+
+export interface EditorHandle {
+  /** Focus the editor. No-op if not yet mounted. */
+  focus: () => void
+  /** Current content as HTML. */
+  getHTML: () => string
+  /** Current content as Tiptap JSON — for round-tripping without going through HTML. */
+  getJSON: () => JSONContent
+  /**
+   * Replace the whole document with new content. This is the correct way to
+   * load new content into a live editor — there is no reactive `content`
+   * prop, since Tiptap never re-parses content on prop changes.
+   */
+  setContent: (content: Content, options?: { emitUpdate?: boolean }) => boolean
+  /** Clear the whole document. */
+  clear: () => boolean
+  /** True once the underlying Tiptap editor has mounted. */
+  isReady: () => boolean
+  /** Escape hatch: the raw Tiptap editor instance. `null` until mounted. */
+  getEditor: () => TiptapEditor | null
 }
 
 interface LinkPopoverState {
@@ -182,13 +215,14 @@ function LinkPopover({
 
 // ── Editor ──────────────────────────────────────────────────────────────────
 
-export function Editor({
+export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   initialContent = '',
   placeholder = 'Start writing…',
   typewriterMode = false,
   className,
+  extensions,
   onChange,
-}: EditorProps) {
+}, ref) {
   const rafRef = useRef<number | null>(null)
   const [linkState, setLinkState] = useState<LinkPopoverState | null>(null)
 
@@ -205,14 +239,24 @@ export function Editor({
     })
   }, [typewriterMode])
 
+  const mergedExtensions = useMemo(
+    () => mergeExtensions(
+      [
+        StarterKit.configure({
+          link: { openOnClick: false, autolink: true },
+        }),
+        Placeholder.configure({ placeholder }),
+        Typography,
+      ],
+      extensions,
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [placeholder],
+  )
+
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        link: { openOnClick: false, autolink: true },
-      }),
-      Placeholder.configure({ placeholder }),
-      Typography,
-    ],
+    immediatelyRender: false,
+    extensions: mergedExtensions,
     content: initialContent,
     editorProps: {
       handleKeyDown: (view, event) => {
@@ -284,6 +328,16 @@ export function Editor({
     if (initialContent) onChange?.(initialContent)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useImperativeHandle(ref, () => ({
+    focus: () => { editor?.chain().focus().run() },
+    getHTML: () => editor?.getHTML() ?? '',
+    getJSON: () => editor?.getJSON() ?? { type: 'doc', content: [] },
+    setContent: (content, options) => editor?.commands.setContent(content, options) ?? false,
+    clear: () => editor?.commands.clearContent(true) ?? false,
+    isReady: () => !!editor,
+    getEditor: () => editor,
+  }), [editor])
+
   return (
     <div className={`cw-editor${className ? ` ${className}` : ''}`}>
       {editor && (
@@ -302,4 +356,6 @@ export function Editor({
       <EditorContent editor={editor} />
     </div>
   )
-}
+})
+
+Editor.displayName = 'Editor'

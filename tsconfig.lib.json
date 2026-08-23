@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "rootDir": "src",
+    "declarationDir": "dist"
+  },
+  "include": [
+    "src/index.ts",
+    "src/components/Editor.tsx",
+    "src/lib/extensions.ts",
+    "src/lib/exportMarkdown.ts"
+  ]
+}

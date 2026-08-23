@@ -1,14 +1,10 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import dts from 'vite-plugin-dts'
+
+// Type declarations are emitted separately via `tsc -p tsconfig.lib.json`
+// (see the `build:lib` script) rather than through a Vite plugin.
 export default defineConfig({
-  plugins: [
-    react(),
-    dts({
-      include: ['src/index.ts', 'src/components/Editor.tsx', 'src/lib/exportMarkdown.ts'],
-      rollupTypes: true,
-    }),
-  ],
+  plugins: [react()],
   build: {
     lib: {
       entry: 'src/index.ts',
