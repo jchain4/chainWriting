@@ -30,6 +30,7 @@
   --cw-table-cell-selected-bg: rgba(99, 102, 241, 0.18);
 
   --cw-focus-ring: 0 0 0 2px rgba(99, 102, 241, 0.6);
+  --cw-editor-padding: 3px 16px;
 }
 
 /* ── Shared entry animation ── */
@@ -133,6 +134,11 @@
 
 .cw-bubble-menu button[data-format="strike"]:hover {
   text-decoration-color: var(--cw-bubble-text-hover);
+}
+
+.cw-bubble-menu button[data-format="h1"] {
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .cw-bubble-menu button[data-format="h2"] {
@@ -253,7 +259,9 @@
 .cw-slash-menu {
   display: flex;
   flex-direction: column;
-  min-width: 140px;
+  min-width: 160px;
+  max-height: 320px;
+  overflow-y: auto;
   padding: 6px;
   background: var(--cw-bubble-bg);
   backdrop-filter: blur(14px) saturate(180%);
@@ -277,6 +285,9 @@
 }
 
 .cw-slash-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   text-align: left;
   background: none;
   border: none;
@@ -286,6 +297,37 @@
   padding: 7px 10px;
   border-radius: 7px;
   transition: color 0.1s, background 0.1s;
+}
+
+.cw-slash-menu__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.cw-slash-menu--flyout {
+  min-width: 140px;
+  animation: cw-float-in-flyout 120ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes cw-float-in-flyout {
+  from { opacity: 0; transform: translateX(-4px) scale(0.97); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cw-slash-menu--flyout {
+    animation: none;
+  }
+}
+
+.cw-slash-menu__chevron {
+  margin-left: auto;
+  color: var(--cw-bubble-text);
+  flex-shrink: 0;
 }
 
 .cw-slash-menu button.is-active,
@@ -325,6 +367,7 @@
   color: inherit;
   line-height: inherit;
   border-radius: 6px;
+  padding: var(--cw-editor-padding);
 }
 
 /* :focus-visible support on contenteditable is inconsistent across browsers

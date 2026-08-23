@@ -2,11 +2,16 @@ import { Extension } from '@tiptap/core'
 import Suggestion from '@tiptap/suggestion'
 import { PluginKey } from '@tiptap/pm/state'
 import type { Editor as TiptapEditor, Range } from '@tiptap/core'
+import type { ReactNode } from 'react'
 
 export interface SlashCommandItem {
   id: string
   label: string
-  execute: (ctx: { editor: TiptapEditor; range: Range }) => void
+  icon: ReactNode
+  /** Leaf items run this when selected. Mutually exclusive with `children`. */
+  execute?: (ctx: { editor: TiptapEditor; range: Range }) => void
+  /** Group items open a submenu showing these instead of running anything. */
+  children?: SlashCommandItem[]
 }
 
 export interface SlashCommandState {
@@ -70,14 +75,19 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
         items: ({ query }) =>
           items.filter((item) => item.label.toLowerCase().startsWith(query.toLowerCase())),
         command: ({ range, props: item }) => {
-          item.execute({ editor: this.editor, range })
+          item.execute?.({ editor: this.editor, range })
         },
         render: () => ({
           onStart: emit,
           onUpdate: emit,
+          // The key handler (SlashMenu) gets first refusal on every key,
+          // including Escape — it needs to decide between "go back one
+          // level" (inside a submenu) and "close entirely". Only falls back
+          // to closing here if there's no handler mounted yet.
           onKeyDown: (props) => {
+            if (getKeyHandler()?.onKeyDown(props.event)) return true
             if (props.event.key === 'Escape') { onStateChange(null); return true }
-            return getKeyHandler()?.onKeyDown(props.event) ?? false
+            return false
           },
           onExit: () => onStateChange(null),
         }),

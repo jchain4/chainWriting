@@ -238,7 +238,7 @@ body {
 .editor-wrapper {
   max-width: 680px;
   margin: 0 auto;
-  padding: 80px 24px 120px;
+  padding: 32px 24px 48px;
 }
 
 /* Pass demo design tokens into the editor component */

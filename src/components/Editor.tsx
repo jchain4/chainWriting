@@ -17,6 +17,10 @@ import { UploadableImage } from '../lib/imageExtension'
 import { insertImageWithUpload } from '../lib/imageUpload'
 import { SlashCommand, type SlashCommandItem, type SlashCommandState, type SlashKeyHandler } from '../lib/slashCommandExtension'
 import { useRovingToolbar, type RovingToolbarHandle } from '../hooks/useRovingToolbar'
+import {
+  IconHeading1, IconHeading2, IconHeading3, IconHeadings, IconQuote,
+  IconLink, IconImage, IconTable,
+} from './icons'
 import '../editor.css'
 
 export interface EditorProps {
@@ -80,6 +84,8 @@ interface LinkPopoverState {
   from: number
   to: number
   initialUrl: string
+  /** Whether there was a real text selection to wrap, vs. inserting fresh linked text at a collapsed cursor. */
+  hasSelection: boolean
 }
 
 // ── Bubble position hook ────────────────────────────────────────────────────
@@ -135,7 +141,7 @@ const BubbleToolbar = forwardRef<RovingToolbarHandle, {
   const toolbarRef = useRef<HTMLDivElement>(null)
   const coords = useBubblePos(editor, toolbarRef)
   const roving = useRovingToolbar({
-    count: 8,
+    count: 9,
     active: coords !== null,
     onEscape: () => editor.chain().focus().run(),
   })
@@ -177,12 +183,13 @@ const BubbleToolbar = forwardRef<RovingToolbarHandle, {
       {btn(2, 'U', 'underline', editor.isActive('underline'), () => editor.chain().focus().toggleUnderline().run(), 'Subrayado (Ctrl+U)', 'Subrayado')}
       {btn(3, 'S', 'strike',    editor.isActive('strike'),    () => editor.chain().focus().toggleStrike().run(),    'Tachado', 'Tachado')}
       {sep()}
-      {btn(4, 'H2', 'h2', editor.isActive('heading', { level: 2 }), () => editor.chain().focus().toggleHeading({ level: 2 }).run(), 'Encabezado 2', 'Encabezado 2')}
-      {btn(5, 'H3', 'h3', editor.isActive('heading', { level: 3 }), () => editor.chain().focus().toggleHeading({ level: 3 }).run(), 'Encabezado 3', 'Encabezado 3')}
+      {btn(4, 'H1', 'h1', editor.isActive('heading', { level: 1 }), () => editor.chain().focus().toggleHeading({ level: 1 }).run(), 'Encabezado 1', 'Encabezado 1')}
+      {btn(5, 'H2', 'h2', editor.isActive('heading', { level: 2 }), () => editor.chain().focus().toggleHeading({ level: 2 }).run(), 'Encabezado 2', 'Encabezado 2')}
+      {btn(6, 'H3', 'h3', editor.isActive('heading', { level: 3 }), () => editor.chain().focus().toggleHeading({ level: 3 }).run(), 'Encabezado 3', 'Encabezado 3')}
       {sep()}
-      {btn(6, '"', 'blockquote', editor.isActive('blockquote'), () => editor.chain().focus().toggleBlockquote().run(), 'Cita', 'Cita')}
+      {btn(7, '"', 'blockquote', editor.isActive('blockquote'), () => editor.chain().focus().toggleBlockquote().run(), 'Cita', 'Cita')}
       {sep()}
-      {btn(7, '↗', 'link', editor.isActive('link'), () => onLinkClick(editor), 'Enlace (Ctrl+K)', 'Enlace')}
+      {btn(8, '↗', 'link', editor.isActive('link'), () => onLinkClick(editor), 'Enlace (Ctrl+K)', 'Enlace')}
     </div>
   )
 })
@@ -196,17 +203,23 @@ function LinkPopover({
   onClose,
 }: {
   state: LinkPopoverState
-  onApply: (url: string) => void
+  onApply: (url: string, text: string) => void
   onClose: () => void
 }) {
   const [url, setUrl] = useState(state.initialUrl)
+  const [text, setText] = useState('')
   const ref = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const textInputRef = useRef<HTMLInputElement>(null)
+  const urlInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    inputRef.current?.focus()
-    inputRef.current?.select()
-  }, [])
+    if (!state.hasSelection) {
+      textInputRef.current?.focus()
+    } else {
+      urlInputRef.current?.focus()
+      urlInputRef.current?.select()
+    }
+  }, [state.hasSelection])
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -218,30 +231,44 @@ function LinkPopover({
     return () => document.removeEventListener('mousedown', handler)
   }, [onClose])
 
+  const handleFieldKeyDown = (e: ReactKeyboardEvent) => {
+    if (e.key === 'Enter') { e.preventDefault(); onApply(url, text) }
+    if (e.key === 'Escape') { e.preventDefault(); onClose() }
+  }
+
   return (
     <div
       ref={ref}
       className="cw-link-popover"
       style={{ top: state.top, left: state.left }}
     >
+      {!state.hasSelection && (
+        <input
+          ref={textInputRef}
+          type="text"
+          value={text}
+          className="cw-link-input"
+          placeholder="Texto del enlace"
+          aria-label="Texto del enlace"
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={handleFieldKeyDown}
+        />
+      )}
       <input
-        ref={inputRef}
+        ref={urlInputRef}
         type="url"
         value={url}
         className="cw-link-input"
         placeholder="https://"
         aria-label="URL del enlace"
         onChange={(e) => setUrl(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') { e.preventDefault(); onApply(url) }
-          if (e.key === 'Escape') { e.preventDefault(); onClose() }
-        }}
+        onKeyDown={handleFieldKeyDown}
       />
       <button
         className="cw-link-btn cw-link-apply"
         title="Aplicar (Enter)"
         aria-label="Aplicar enlace"
-        onPointerDown={(e) => { e.preventDefault(); onApply(url) }}
+        onPointerDown={(e) => { e.preventDefault(); onApply(url, text) }}
       >
         ↵
       </button>
@@ -250,7 +277,7 @@ function LinkPopover({
           className="cw-link-btn cw-link-remove"
           title="Eliminar enlace"
           aria-label="Eliminar enlace"
-          onPointerDown={(e) => { e.preventDefault(); onApply('') }}
+          onPointerDown={(e) => { e.preventDefault(); onApply('', text) }}
         >
           ✕
         </button>
@@ -270,53 +297,160 @@ const SlashMenu = forwardRef<SlashKeyHandler, {
   onHighlightChange: (id: string | null) => void
 }>(function SlashMenu({ items, coords, listboxId, onSelect, onClose, onHighlightChange }, ref) {
   const [selected, setSelected] = useState(0)
+  // A group item (e.g. "Encabezado") opens its children in a second small
+  // popup to the right of the main one — a real flyout, like a native OS
+  // submenu — rather than swapping the main list's contents in place.
+  const [flyoutItem, setFlyoutItem] = useState<SlashCommandItem | null>(null)
+  const [flyoutPos, setFlyoutPos] = useState<{ top: number; left: number } | null>(null)
+  const [flyoutSelected, setFlyoutSelected] = useState(0)
+  // Which list arrow keys/Enter currently apply to — switches when the user
+  // explicitly drills into the flyout (→/Enter on a group) or hovers into it.
+  const [focusZone, setFocusZone] = useState<'main' | 'flyout'>('main')
 
-  // Reset the highlighted item whenever the filtered list changes.
+  const menuRef = useRef<HTMLDivElement>(null)
+  const itemRefs = useRef(new Map<string, HTMLButtonElement>())
+
+  const openFlyout = useCallback((item: SlashCommandItem) => {
+    if (!item.children || item.children.length === 0) {
+      setFlyoutItem(null)
+      setFlyoutPos(null)
+      return
+    }
+    const btn = itemRefs.current.get(item.id)
+    const menuEl = menuRef.current
+    if (btn && menuEl) {
+      const btnRect = btn.getBoundingClientRect()
+      const menuRect = menuEl.getBoundingClientRect()
+      setFlyoutPos({ top: btnRect.top, left: menuRect.right + 6 })
+    }
+    setFlyoutItem(item)
+    setFlyoutSelected(0)
+  }, [])
+
+  const closeFlyout = useCallback(() => {
+    setFlyoutItem(null)
+    setFlyoutPos(null)
+  }, [])
+
+  // Reset browsing state whenever the underlying (typed-query-driven) item
+  // list changes — e.g. the user kept typing while a flyout was open, which
+  // re-filters the top-level list independently of our local hover/keyboard
+  // state, so falling back to it is the least surprising behavior.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { setSelected(0) }, [items])
+  useEffect(() => { setSelected(0); closeFlyout(); setFocusZone('main') }, [items])
 
   // Focus never moves into this menu (it's driven by typed text while the
   // contenteditable stays focused, Notion-style), so the highlighted item
   // is exposed to assistive tech via aria-activedescendant on the editable
   // element itself — see the effect near the editor's useEditor() call.
   useEffect(() => {
-    onHighlightChange(items[selected] ? `${listboxId}-option-${items[selected].id}` : null)
-  }, [items, selected, listboxId, onHighlightChange])
+    const current = focusZone === 'flyout' && flyoutItem
+      ? flyoutItem.children?.[flyoutSelected]
+      : items[selected]
+    onHighlightChange(current ? `${listboxId}-option-${current.id}` : null)
+  }, [items, selected, flyoutItem, flyoutSelected, focusZone, listboxId, onHighlightChange])
 
   useEffect(() => () => onHighlightChange(null), [onHighlightChange])
 
   useImperativeHandle(ref, () => ({
     onKeyDown: (event) => {
-      if (event.key === 'Escape') { onClose(); return true }
+      if (event.key === 'Escape') {
+        if (flyoutItem) { closeFlyout(); setFocusZone('main') }
+        else onClose()
+        return true
+      }
+
+      if (focusZone === 'flyout' && flyoutItem) {
+        const children = flyoutItem.children ?? []
+        if (children.length === 0) return false
+        if (event.key === 'ArrowDown') { setFlyoutSelected((i) => (i + 1) % children.length); return true }
+        if (event.key === 'ArrowUp') { setFlyoutSelected((i) => (i - 1 + children.length) % children.length); return true }
+        if (event.key === 'ArrowLeft') { closeFlyout(); setFocusZone('main'); return true }
+        if (event.key === 'Enter') { onSelect(children[flyoutSelected]); return true }
+        return false
+      }
+
       if (items.length === 0) return false
-      if (event.key === 'ArrowDown') { setSelected((i) => (i + 1) % items.length); return true }
-      if (event.key === 'ArrowUp') { setSelected((i) => (i - 1 + items.length) % items.length); return true }
-      if (event.key === 'Enter') { onSelect(items[selected]); return true }
+      if (event.key === 'ArrowDown') {
+        const next = (selected + 1) % items.length
+        setSelected(next)
+        openFlyout(items[next])
+        return true
+      }
+      if (event.key === 'ArrowUp') {
+        const next = (selected - 1 + items.length) % items.length
+        setSelected(next)
+        openFlyout(items[next])
+        return true
+      }
+      if (event.key === 'ArrowRight' && items[selected]?.children) {
+        openFlyout(items[selected])
+        setFocusZone('flyout')
+        return true
+      }
+      if (event.key === 'Enter') {
+        const item = items[selected]
+        if (!item) return false
+        if (item.children) { openFlyout(item); setFocusZone('flyout') }
+        else onSelect(item)
+        return true
+      }
       return false
     },
-  }), [items, selected, onSelect, onClose])
+  }), [items, selected, flyoutItem, flyoutSelected, focusZone, openFlyout, closeFlyout, onSelect, onClose])
 
   return (
-    <div id={listboxId} role="listbox" aria-label="Comandos" className="cw-slash-menu" style={{ position: 'fixed', top: coords.top, left: coords.left }}>
-      {items.length === 0 ? (
-        <div className="cw-slash-menu__empty">Sin resultados</div>
-      ) : (
-        items.map((item, i) => (
-          <button
-            key={item.id}
-            id={`${listboxId}-option-${item.id}`}
-            role="option"
-            aria-selected={i === selected}
-            className={i === selected ? 'is-active' : ''}
-            tabIndex={-1}
-            onPointerEnter={() => setSelected(i)}
-            onPointerDown={(e) => { e.preventDefault(); onSelect(item) }}
-          >
-            {item.label}
-          </button>
-        ))
+    <>
+      <div ref={menuRef} id={listboxId} role="listbox" aria-label="Comandos" className="cw-slash-menu" style={{ position: 'fixed', top: coords.top, left: coords.left }}>
+        {items.length === 0 ? (
+          <div className="cw-slash-menu__empty">Sin resultados</div>
+        ) : (
+          items.map((item, i) => (
+            <button
+              key={item.id}
+              ref={(el) => {
+                if (el) itemRefs.current.set(item.id, el)
+                else itemRefs.current.delete(item.id)
+              }}
+              id={`${listboxId}-option-${item.id}`}
+              role="option"
+              aria-selected={focusZone === 'main' && i === selected}
+              className={i === selected ? 'is-active' : ''}
+              tabIndex={-1}
+              onPointerEnter={() => { setSelected(i); setFocusZone('main'); openFlyout(item) }}
+              onPointerDown={(e) => {
+                e.preventDefault()
+                if (item.children) { openFlyout(item); setFocusZone('flyout') }
+                else onSelect(item)
+              }}
+            >
+              <span className="cw-slash-menu__icon">{item.icon}</span>
+              {item.label}
+              {item.children && <span className="cw-slash-menu__chevron">›</span>}
+            </button>
+          ))
+        )}
+      </div>
+      {flyoutItem && flyoutPos && (
+        <div role="listbox" aria-label={flyoutItem.label} className="cw-slash-menu cw-slash-menu--flyout" style={{ position: 'fixed', top: flyoutPos.top, left: flyoutPos.left }}>
+          {(flyoutItem.children ?? []).map((child, i) => (
+            <button
+              key={child.id}
+              id={`${listboxId}-option-${child.id}`}
+              role="option"
+              aria-selected={focusZone === 'flyout' && i === flyoutSelected}
+              className={i === flyoutSelected ? 'is-active' : ''}
+              tabIndex={-1}
+              onPointerEnter={() => { setFlyoutSelected(i); setFocusZone('flyout') }}
+              onPointerDown={(e) => { e.preventDefault(); onSelect(child) }}
+            >
+              <span className="cw-slash-menu__icon">{child.icon}</span>
+              {child.label}
+            </button>
+          ))}
+        </div>
       )}
-    </div>
+    </>
   )
 })
 
@@ -516,10 +650,67 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   const instanceId = useId()
   const slashListboxId = `cw-slash-${instanceId}`
 
+  // Defined before slashItems (which calls it from the "Enlace" item's
+  // execute callback) — useMemo's factory runs synchronously during render,
+  // unlike the deferred event handlers elsewhere in this file, so openLink
+  // must already exist by the time slashItems is computed.
+  const openLink = useCallback((ed: TiptapEditor) => {
+    const { from, to } = ed.state.selection
+    // No early-return on a collapsed selection here: both existing callers
+    // (the Ctrl+K handler below, and the bubble menu's link button, which
+    // only renders while the bubble is visible) already only invoke this
+    // when there's a real selection or the cursor is on a link. The "/"
+    // command menu is the one caller that deliberately wants to open this
+    // with a collapsed selection, to insert a brand new link.
+    try {
+      const startCoords = ed.view.coordsAtPos(from)
+      const endCoords = ed.view.coordsAtPos(to)
+      const midX = (startCoords.left + endCoords.right) / 2
+      const popoverH = 44
+      const gap = 10
+      const top = startCoords.bottom + popoverH + gap < window.innerHeight
+        ? startCoords.bottom + gap
+        : startCoords.top - popoverH - gap
+      const initialUrl = (ed.getAttributes('link').href as string) ?? ''
+      setLinkState({ top, left: midX, from, to, initialUrl, hasSelection: from !== to })
+    } catch {}
+  }, [])
+
   const slashItems = useMemo<SlashCommandItem[]>(() => [
+    {
+      id: 'heading-group',
+      label: 'Encabezado',
+      icon: <IconHeadings />,
+      children: [
+        {
+          id: 'h1', label: 'Encabezado 1', icon: <IconHeading1 />,
+          execute: ({ editor, range }) => editor.chain().focus().deleteRange(range).toggleHeading({ level: 1 }).run(),
+        },
+        {
+          id: 'h2', label: 'Encabezado 2', icon: <IconHeading2 />,
+          execute: ({ editor, range }) => editor.chain().focus().deleteRange(range).toggleHeading({ level: 2 }).run(),
+        },
+        {
+          id: 'h3', label: 'Encabezado 3', icon: <IconHeading3 />,
+          execute: ({ editor, range }) => editor.chain().focus().deleteRange(range).toggleHeading({ level: 3 }).run(),
+        },
+      ],
+    },
+    {
+      id: 'blockquote', label: 'Cita', icon: <IconQuote />,
+      execute: ({ editor, range }) => editor.chain().focus().deleteRange(range).toggleBlockquote().run(),
+    },
+    {
+      id: 'link', label: 'Enlace', icon: <IconLink />,
+      execute: ({ editor, range }) => {
+        editor.chain().focus().deleteRange(range).run()
+        openLink(editor)
+      },
+    },
     {
       id: 'image',
       label: 'Imagen',
+      icon: <IconImage />,
       execute: ({ editor, range }) => {
         editor.chain().focus().deleteRange(range).run()
         const coords = editor.view.coordsAtPos(editor.state.selection.from)
@@ -529,11 +720,12 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     {
       id: 'table',
       label: 'Tabla',
+      icon: <IconTable />,
       execute: ({ editor, range }) => {
         editor.chain().focus().deleteRange(range).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
       },
     },
-  ], [])
+  ], [openLink])
 
   const slashExtension = useMemo(() => SlashCommand.configure({
     items: slashItems,
@@ -585,6 +777,22 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
         'aria-multiline': 'true',
         'aria-label': accessibleName,
         'aria-haspopup': 'listbox',
+      },
+      // Tiptap's Link mark is configured with openOnClick: false (a plain
+      // click selects the link's mark range so it can be edited via Ctrl+K,
+      // rather than navigating away mid-edit) — and the extension itself has
+      // no modifier-key exception. Ctrl/Cmd+Click to open in a new tab is a
+      // separate, deliberate addition here, matching the Notion/Google Docs
+      // convention.
+      handleClick: (_view, _pos, event) => {
+        if (event.button !== 0 || !(event.ctrlKey || event.metaKey)) return false
+        const target = event.target as HTMLElement | null
+        const link = target?.closest('a')
+        if (!link) return false
+        const href = link.getAttribute('href')
+        if (!href) return false
+        window.open(href, '_blank', 'noopener,noreferrer')
+        return true
       },
       handleKeyDown: (view, event) => {
         if (event.key === 'Tab' && !event.shiftKey) {
@@ -673,31 +881,32 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     }
   }, [editor, slashState, slashHighlightId, slashListboxId])
 
-  const openLink = useCallback((ed: TiptapEditor) => {
-    const { from, to } = ed.state.selection
-    if (from === to && !ed.isActive('link')) return
-    try {
-      const startCoords = ed.view.coordsAtPos(from)
-      const endCoords = ed.view.coordsAtPos(to)
-      const midX = (startCoords.left + endCoords.right) / 2
-      const popoverH = 44
-      const gap = 10
-      const top = startCoords.bottom + popoverH + gap < window.innerHeight
-        ? startCoords.bottom + gap
-        : startCoords.top - popoverH - gap
-      const initialUrl = (ed.getAttributes('link').href as string) ?? ''
-      setLinkState({ top, left: midX, from, to, initialUrl })
-    } catch {}
-  }, [])
-
-  const applyLink = useCallback((url: string) => {
+  const applyLink = useCallback((url: string, text: string) => {
     if (!editor || !linkState) return
-    const { from, to } = linkState
+    const { from, to, hasSelection, initialUrl } = linkState
     const trimmed = url.trim()
+
+    if (!hasSelection) {
+      // Triggered from the "/" menu with no prior selection — insert brand
+      // new linked text at the cursor rather than wrapping anything.
+      if (trimmed) {
+        const label = text.trim() || trimmed
+        editor.chain().focus().insertContentAt(from, {
+          type: 'text',
+          text: label,
+          marks: [{ type: 'link', attrs: { href: trimmed } }],
+        }).run()
+      } else {
+        editor.chain().focus().run()
+      }
+      setLinkState(null)
+      return
+    }
+
     const chain = editor.chain().setTextSelection({ from, to })
     if (trimmed) {
       chain.setLink({ href: trimmed })
-    } else if (linkState.initialUrl) {
+    } else if (initialUrl) {
       chain.unsetLink()
     }
     chain.focus().run()
