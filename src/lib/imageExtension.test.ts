@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Editor as TiptapEditor } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import { UploadableImage } from './imageExtension'
@@ -8,11 +8,24 @@ import { insertImageWithUpload } from './imageUpload'
 // exist here — a headless (non-React) Tiptap editor still needs a real DOM
 // to construct its EditorView against, even though nothing attaches to
 // document.body.
+//
+// EditorView schedules its DOM-mutation flush via setTimeout; if the editor
+// is never destroyed, that timer outlives the test and fires after jsdom is
+// torn down, throwing "document is not defined" as an unhandled rejection.
+// Track every instance created here and destroy it in afterEach.
+const liveEditors: TiptapEditor[] = []
+
 function makeEditor() {
-  return new TiptapEditor({
+  const editor = new TiptapEditor({
     extensions: [StarterKit, UploadableImage.configure({ inline: false, allowBase64: true })],
   })
+  liveEditors.push(editor)
+  return editor
 }
+
+afterEach(() => {
+  while (liveEditors.length) liveEditors.pop()!.destroy()
+})
 
 describe('UploadableImage commands', () => {
   it('insertPendingImage inserts an image node carrying data-upload-id', () => {
