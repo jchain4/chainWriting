@@ -18,7 +18,8 @@ import { insertImageWithUpload } from '../lib/imageUpload'
 import { SlashCommand, type SlashCommandItem, type SlashCommandState, type SlashKeyHandler } from '../lib/slashCommandExtension'
 import { useRovingToolbar, type RovingToolbarHandle } from '../hooks/useRovingToolbar'
 import {
-  IconHeading1, IconHeading2, IconHeading3, IconHeadings, IconQuote,
+  IconHeading1, IconHeading2, IconHeading3, IconHeadings,
+  IconBulletList, IconOrderedList, IconQuote,
   IconLink, IconImage, IconTable,
 } from './icons'
 import '../editor.css'
@@ -38,7 +39,22 @@ export interface EditorProps {
    * effect on the live editor.
    */
   extensions?: AnyExtension[]
+  /**
+   * Whether the editor accepts input. Default true. Unlike `extensions`/
+   * `initialContent` (construction-only), this IS reactive — toggling it
+   * after mount calls Tiptap's setEditable() on the live editor, useful for
+   * e.g. a read-only "review" mode without remounting.
+   */
+  editable?: boolean
   onChange?: (html: string) => void
+  onSelectionUpdate?: (editor: TiptapEditor) => void
+  /**
+   * Fires once per focus/blur of the editor as a whole (Tiptap's own
+   * focus/blur event), not a raw DOM event bubbling from every element
+   * inside the contenteditable.
+   */
+  onFocus?: (editor: TiptapEditor, event: FocusEvent) => void
+  onBlur?: (editor: TiptapEditor, event: FocusEvent) => void
   /**
    * Enables file-based image insertion (the upload button in the image
    * popover, plus dropping/pasting raw image files). Receives the file and
@@ -632,7 +648,11 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   typewriterMode = false,
   className,
   extensions,
+  editable = true,
   onChange,
+  onSelectionUpdate,
+  onFocus,
+  onBlur,
   onImageUpload,
   ariaLabel,
 }, ref) {
@@ -695,6 +715,14 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
           execute: ({ editor, range }) => editor.chain().focus().deleteRange(range).toggleHeading({ level: 3 }).run(),
         },
       ],
+    },
+    {
+      id: 'bulletList', label: 'Lista', icon: <IconBulletList />,
+      execute: ({ editor, range }) => editor.chain().focus().deleteRange(range).toggleBulletList().run(),
+    },
+    {
+      id: 'orderedList', label: 'Lista numerada', icon: <IconOrderedList />,
+      execute: ({ editor, range }) => editor.chain().focus().deleteRange(range).toggleOrderedList().run(),
     },
     {
       id: 'blockquote', label: 'Cita', icon: <IconQuote />,
@@ -771,6 +799,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     immediatelyRender: false,
     extensions: mergedExtensions,
     content: initialContent,
+    editable,
     editorProps: {
       attributes: {
         role: 'textbox',
@@ -850,7 +879,10 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     },
     onSelectionUpdate: ({ editor }) => {
       scrollToCursor(editor)
+      onSelectionUpdate?.(editor)
     },
+    onFocus: ({ editor, event }) => { onFocus?.(editor, event) },
+    onBlur: ({ editor, event }) => { onBlur?.(editor, event) },
   })
 
   const handleImageFile = useCallback((file: File, alt?: string) => {
@@ -862,6 +894,17 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     editor?.chain().focus().setImage({ src: url, alt }).run()
     setImageInsertState(null)
   }, [editor])
+
+  // editable is deliberately reactive (unlike extensions/initialContent,
+  // which are construction-only — reparsing content or rebuilding the
+  // schema on every render would be expensive and would clobber cursor
+  // position/undo history). Tiptap's setEditable() is cheap and side-effect
+  // free, and toggling read-only state at runtime (e.g. a "review mode"
+  // button) is an inherently live use case, not a one-time construction choice.
+  useEffect(() => {
+    if (!editor) return
+    if (editor.isEditable !== editable) editor.setEditable(editable)
+  }, [editor, editable])
 
   // Keep the editable element's dynamic ARIA state in sync with the slash
   // menu — editorProps.attributes is fixed at useEditor() construction time,

@@ -2,7 +2,9 @@ import { createRef } from 'react'
 import { fireEvent, render, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { Extension } from '@tiptap/react'
+import { PluginKey } from '@tiptap/pm/state'
 import { Editor, type EditorHandle } from './Editor'
+import { createHighlightPlugin, setHighlightRanges } from '../lib/highlightPlugin'
 
 function mockSelectionRect() {
   // jsdom implements neither Range.prototype.getBoundingClientRect nor
@@ -126,6 +128,76 @@ describe('Editor', () => {
 
     editor.chain().focus().deleteTable().run()
     expect(ref.current!.getHTML()).not.toContain('<table')
+  })
+
+  describe('editable prop', () => {
+    it('defaults to editable', async () => {
+      const { ref } = await renderReadyEditor()
+      expect(ref.current!.getEditor()!.isEditable).toBe(true)
+    })
+
+    it('honors editable={false} at mount', async () => {
+      const { ref } = await renderReadyEditor({ editable: false })
+      expect(ref.current!.getEditor()!.isEditable).toBe(false)
+    })
+
+    it('reactively syncs isEditable when the prop changes after mount', async () => {
+      const { ref, rerender } = await renderReadyEditor({ editable: true })
+      const editor = ref.current!.getEditor()!
+      expect(editor.isEditable).toBe(true)
+
+      rerender(<Editor ref={ref} editable={false} />)
+      await waitFor(() => expect(editor.isEditable).toBe(false))
+
+      rerender(<Editor ref={ref} editable={true} />)
+      await waitFor(() => expect(editor.isEditable).toBe(true))
+    })
+  })
+
+  describe('lifecycle callbacks', () => {
+    it('fires onSelectionUpdate when the selection moves', async () => {
+      const onSelectionUpdate = vi.fn()
+      const { ref } = await renderReadyEditor({ initialContent: '<p>hello world</p>', onSelectionUpdate })
+      const editor = ref.current!.getEditor()!
+      onSelectionUpdate.mockClear()
+
+      editor.chain().focus().setTextSelection({ from: 1, to: 6 }).run()
+      expect(onSelectionUpdate).toHaveBeenCalledWith(editor)
+    })
+
+    it('fires onFocus and onBlur', async () => {
+      const onFocus = vi.fn()
+      const onBlur = vi.fn()
+      const { ref } = await renderReadyEditor({ onFocus, onBlur })
+      const editor = ref.current!.getEditor()!
+
+      editor.commands.focus()
+      await waitFor(() => expect(onFocus).toHaveBeenCalledWith(editor, expect.anything()))
+
+      editor.commands.blur()
+      await waitFor(() => expect(onBlur).toHaveBeenCalledWith(editor, expect.anything()))
+    })
+  })
+
+  describe('AI-readiness: highlight decorations', () => {
+    it('registers, renders, and unregisters a highlight plugin without touching document content', async () => {
+      const { ref, container } = await renderReadyEditor({ initialContent: '<p>hello world</p>' })
+      const editor = ref.current!.getEditor()!
+      const key = new PluginKey('test-highlight')
+
+      editor.registerPlugin(createHighlightPlugin(key))
+      setHighlightRanges(editor, key, [{ id: 'a', from: 1, to: 6, title: 'flag' }])
+
+      await waitFor(() => expect(container.querySelector('[data-highlight-id="a"]')).toBeInTheDocument())
+      const span = container.querySelector('[data-highlight-id="a"]')!
+      expect(span).toHaveClass('cw-highlight-range')
+      expect(span.getAttribute('title')).toBe('flag')
+
+      expect(ref.current!.getHTML()).not.toContain('cw-highlight-range')
+
+      editor.unregisterPlugin(key)
+      await waitFor(() => expect(container.querySelector('[data-highlight-id="a"]')).not.toBeInTheDocument())
+    })
   })
 
   describe('accessibility', () => {

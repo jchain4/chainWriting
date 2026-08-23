@@ -11,6 +11,7 @@
     "src/index.ts",
     "src/components/Editor.tsx",
     "src/lib/extensions.ts",
-    "src/lib/exportMarkdown.ts"
+    "src/lib/exportMarkdown.ts",
+    "src/lib/highlightPlugin.ts"
   ]
 }

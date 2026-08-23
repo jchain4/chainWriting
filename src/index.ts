@@ -14,4 +14,14 @@ import '@tiptap/suggestion'
 
 export { Editor } from './components/Editor'
 export type { EditorProps, EditorHandle } from './components/Editor'
-export { htmlToMarkdown, countWords, downloadMarkdown } from './lib/exportMarkdown'
+export {
+  htmlToMarkdown,
+  getText,
+  countWords,
+  getDocumentStats,
+  getHeadingOutline,
+  downloadMarkdown,
+} from './lib/exportMarkdown'
+export type { DocumentStats, HeadingOutlineItem } from './lib/exportMarkdown'
+export { createHighlightPlugin, setHighlightRanges } from './lib/highlightPlugin'
+export type { HighlightRange } from './lib/highlightPlugin'

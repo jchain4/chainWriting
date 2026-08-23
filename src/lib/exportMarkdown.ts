@@ -37,6 +37,15 @@ export function htmlToMarkdown(html: string): string {
   md = md.replace(/<s[^>]*>([\s\S]*?)<\/s>/gi, (_, c) => `~~${c}~~`)
   md = md.replace(/<code[^>]*>([\s\S]*?)<\/code>/gi, (_, c) => `\`${decodeEntities(c)}\``)
 
+  // Links — runs after inline formatting above, so a link wrapping <strong>/
+  // <em> already reads as **text**/*text* by the time it's captured here.
+  md = md.replace(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi, (_, attrs, inner) => {
+    const href = /\bhref="([^"]*)"/i.exec(attrs)?.[1] ?? ''
+    const label = stripTags(inner).trim()
+    if (!label) return ''
+    return href ? `[${label}](${href})` : label
+  })
+
   // Images — block-level (Image is configured with inline: false), never
   // nested inside a <p>. alt/title are omitted from the HTML entirely when
   // unset, so both attributes are looked up independently rather than
@@ -67,9 +76,17 @@ export function htmlToMarkdown(html: string): string {
     return `${header}\n${divider}\n${body ? body + '\n' : ''}\n`
   })
 
-  // Lists
+  // Lists — ordered lists first (numbered), so their <li>s are consumed
+  // before the generic bullet rule below would flatten them to "-".
+  // Nested lists aren't supported (a nested <li> confuses the non-greedy
+  // match) — a pre-existing limitation, unchanged here.
+  md = md.replace(/<ol[^>]*>([\s\S]*?)<\/ol>/gi, (_, inner) => {
+    let n = 0
+    return (inner as string).replace(/<li[^>]*>([\s\S]*?)<\/li>/gi,
+      (_m, c) => `${++n}. ${stripTags(c).trim()}\n`) + '\n'
+  })
   md = md.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (_, c) => `- ${stripTags(c).trim()}\n`)
-  md = md.replace(/<[uo]l[^>]*>([\s\S]*?)<\/[uo]l>/gi, (_, c) => c + '\n')
+  md = md.replace(/<ul[^>]*>([\s\S]*?)<\/ul>/gi, (_, c) => c + '\n')
 
   // Paragraphs and breaks
   md = md.replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, (_, c) => `${c}\n\n`)
@@ -86,6 +103,61 @@ export function htmlToMarkdown(html: string): string {
 export function countWords(html: string): number {
   const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
   return text ? text.split(' ').filter(Boolean).length : 0
+}
+
+/** Plain-text extraction (no HTML, no Markdown) — preserves block boundaries as newlines. */
+export function getText(html: string): string {
+  let text = html.replace(/<\/(p|h[1-6]|li|blockquote|tr)>/gi, '\n')
+  text = text.replace(/<br[^>]*\/?>/gi, '\n')
+  text = text.replace(/<hr[^>]*\/?>/gi, '\n')
+  text = stripTags(text)
+  text = decodeEntities(text)
+  text = text.replace(/[ \t]+/g, ' ')
+  return text.replace(/\n[ \t]+/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+}
+
+export interface DocumentStats {
+  words: number
+  characters: number
+  charactersNoSpaces: number
+  readingTimeMinutes: number
+  links: number
+  images: number
+  tables: number
+}
+
+export function getDocumentStats(html: string, options?: { wordsPerMinute?: number }): DocumentStats {
+  const wordsPerMinute = options?.wordsPerMinute ?? 200
+  const flat = decodeEntities(html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())
+  const words = flat ? flat.split(' ').filter(Boolean).length : 0
+  return {
+    words,
+    characters: flat.length,
+    charactersNoSpaces: flat.replace(/\s/g, '').length,
+    readingTimeMinutes: Math.max(1, Math.round(words / wordsPerMinute)),
+    links: (html.match(/<a\b[^>]*\bhref="[^"]*"/gi) ?? []).length,
+    images: (html.match(/<img\b/gi) ?? []).length,
+    tables: (html.match(/<table\b/gi) ?? []).length,
+  }
+}
+
+export interface HeadingOutlineItem {
+  level: number
+  text: string
+  id?: string
+}
+
+/** Walks h1-h6 in document order. `id` is only set if already present in the HTML — no slug generation. */
+export function getHeadingOutline(html: string): HeadingOutlineItem[] {
+  const items: HeadingOutlineItem[] = []
+  const re = /<h([1-6])([^>]*)>([\s\S]*?)<\/h\1>/gi
+  let match: RegExpExecArray | null
+  while ((match = re.exec(html))) {
+    const [, levelStr, attrs, inner] = match
+    const id = /\bid="([^"]*)"/i.exec(attrs)?.[1]
+    items.push({ level: Number(levelStr), text: decodeEntities(stripTags(inner)).trim(), id })
+  }
+  return items
 }
 
 export function downloadMarkdown(title: string, html: string): void {

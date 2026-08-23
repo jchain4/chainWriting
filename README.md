@@ -63,7 +63,11 @@ function App() {
 | `typewriterMode` | `boolean` | `false` | Keep cursor vertically centered |
 | `className` | `string` | — | Extra class on `.cw-editor` for scoped CSS variable overrides |
 | `extensions` | `AnyExtension[]` | — | Extra Tiptap extensions merged into the built-in set — see "Customizing extensions" |
+| `editable` | `boolean` | `true` | Whether the editor accepts input. Reactive — unlike `extensions`/`initialContent`, toggling this after mount live-updates the editor |
 | `onChange` | `(html: string) => void` | — | Called on every content change |
+| `onSelectionUpdate` | `(editor: Editor) => void` | — | Called whenever the selection changes |
+| `onFocus` | `(editor: Editor, event: FocusEvent) => void` | — | Called when the editor gains focus |
+| `onBlur` | `(editor: Editor, event: FocusEvent) => void` | — | Called when the editor loses focus |
 | `onImageUpload` | `(file: File) => Promise<string>` | — | Enables file-based image insertion — see "Rich content" |
 | `ariaLabel` | `string` | falls back to `placeholder` | Accessible name for the editing surface — see "Accessibility" |
 | `ref` | `Ref<EditorHandle>` | — | Imperative handle — see "Imperative API" |
@@ -99,7 +103,9 @@ function App() {
 | `isReady()` | Whether the underlying Tiptap editor has mounted |
 | `getEditor()` | Escape hatch — the raw Tiptap `Editor` instance, `null` until mounted |
 
-There is no reactive `content` prop: Tiptap never re-parses content on prop changes, so pushing new content into a live editor always goes through `ref.current.setContent(...)`.
+There is no reactive `content` prop: Tiptap never re-parses content on prop changes, so pushing new content into a live editor always goes through `ref.current.setContent(...)`. The `editable` prop is the one exception to this construction-only rule — it's designed to be toggled live (e.g. a read-only "review" mode), so it's synced reactively on every render rather than only read once.
+
+**chain-writing does not sanitize HTML anywhere** — `getHTML()`/`getJSON()` return exactly what's in the document, and `setContent()` is a raw passthrough with no XSS filtering. If you load HTML from an untrusted source (another user's document, a third-party API) and feed it back in via `setContent()`, sanitize it yourself first (e.g. with [DOMPurify](https://github.com/cure53/DOMPurify)).
 
 ## Customizing extensions
 
@@ -121,7 +127,7 @@ import { MyMention } from './my-mention'
 
 ## Rich content
 
-Type `/` at the start of an empty line to open a command menu with two entries: **Imagen** and **Tabla**.
+Type `/` at the start of an empty line to open a command menu: **Encabezado** (H1/H2/H3, in a submenu), **Lista**, **Lista numerada**, **Cita**, **Enlace**, **Imagen**, and **Tabla**.
 
 **Images** can always be inserted by URL. To also enable inserting from a local file (via the upload button in the image popover, or by dragging/pasting an image file directly into the editor), pass `onImageUpload`:
 
@@ -139,6 +145,65 @@ The image is inserted immediately with a local preview and swapped for the real 
 Pasted HTML containing images (e.g. from Google Docs) is parsed independently of `onImageUpload`, since it arrives as `<img>` markup rather than a raw file. Word's clipboard often references images by local file path, which won't resolve in the browser — the rest of a Word paste (text, tables) is unaffected.
 
 **Tables** come with a small contextual toolbar (add/remove row or column, delete table) that appears whenever the cursor is inside one.
+
+## Content export & document stats
+
+These all operate on plain HTML strings — the same string `onChange`/`getHTML()` produce — so they work without a live `Editor` instance (e.g. server-side, on content loaded from storage):
+
+| Function | Description |
+|----------|-------------|
+| `htmlToMarkdown(html)` | Converts to Markdown (GFM-flavored: fenced code, pipe tables, strikethrough, numbered lists, links) |
+| `getText(html)` | Plain text, no HTML/Markdown — one line per block (paragraph, heading, list item, etc.) |
+| `countWords(html)` | Word count. Kept for backward compatibility — `getDocumentStats` is the richer superset below |
+| `getDocumentStats(html, options?)` | `{ words, characters, charactersNoSpaces, readingTimeMinutes, links, images, tables }`. `options.wordsPerMinute` defaults to `200` |
+| `getHeadingOutline(html)` | `{ level, text, id? }[]` for every h1-h6, in document order — useful for a table of contents. `id` is only set if already present in the HTML; no slugs are generated |
+| `downloadMarkdown(title, html)` | Browser-only: triggers a `.md` file download. Call it from an event handler, not during SSR render |
+
+```tsx
+import { getDocumentStats, getHeadingOutline } from 'chain-writing'
+
+const stats = getDocumentStats(html)
+// { words: 128, characters: 612, ..., readingTimeMinutes: 1, links: 2, images: 1, tables: 0 }
+
+const outline = getHeadingOutline(html)
+// [{ level: 1, text: 'Introduction' }, { level: 2, text: 'Details' }, ...]
+```
+
+## Highlighting text ranges (e.g. AI style-check flags)
+
+`createHighlightPlugin`/`setHighlightRanges` give an AI integration (or any external analysis) a way to highlight arbitrary text ranges — flagged phrases, suggestions, comments — as a pure overlay: highlights never appear in `getHTML()`/`getJSON()` output and never add undo-history entries, since they're ProseMirror decorations, not document content.
+
+```tsx
+import { useEffect, useRef } from 'react'
+import { PluginKey } from '@tiptap/pm/state'
+import { Editor, createHighlightPlugin, setHighlightRanges, type EditorHandle } from 'chain-writing'
+
+const styleCheckKey = new PluginKey('style-check')
+
+function MyEditor() {
+  const editorRef = useRef<EditorHandle>(null)
+
+  useEffect(() => {
+    const editor = editorRef.current?.getEditor()
+    if (!editor) return
+
+    editor.registerPlugin(createHighlightPlugin(styleCheckKey))
+    return () => { editor.unregisterPlugin(styleCheckKey) }
+  }, [editorRef.current?.isReady()])
+
+  function applyFlags(flags: { id: string; from: number; to: number; message: string }[]) {
+    const editor = editorRef.current?.getEditor()
+    if (!editor) return
+    setHighlightRanges(editor, styleCheckKey, flags.map((f) => ({
+      id: f.id, from: f.from, to: f.to, title: f.message,
+    })))
+  }
+
+  return <Editor ref={editorRef} />
+}
+```
+
+Ranges remap automatically as the document is edited elsewhere, so a highlight stays attached to the right text even after unrelated typing. Pass `[]` to `setHighlightRanges` to clear. Default styling is one CSS variable, `--cw-highlight-decoration` (a wavy underline) — override it, or target `.cw-highlight-range` / `[data-highlight-id]` directly for a different treatment.
 
 ## Server-side rendering / Next.js
 

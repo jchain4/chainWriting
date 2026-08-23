@@ -31,6 +31,8 @@
 
   --cw-focus-ring: 0 0 0 2px rgba(99, 102, 241, 0.6);
   --cw-editor-padding: 3px 16px;
+
+  --cw-highlight-decoration: underline wavy rgba(234, 179, 8, 0.7);
 }
 
 /* ── Shared entry animation ── */
@@ -377,6 +379,13 @@
 .ProseMirror:focus-visible,
 .ProseMirror:focus {
   box-shadow: var(--cw-focus-ring);
+}
+
+/* ── Highlight ranges (e.g. AI style-check flags — see createHighlightPlugin) ── */
+
+.ProseMirror .cw-highlight-range {
+  text-decoration: var(--cw-highlight-decoration);
+  text-underline-offset: 3px;
 }
 
 /* ── Links ── */

@@ -14,10 +14,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `htmlToMarkdown` now converts images and tables to their Markdown equivalents.
 - Accessibility: keyboard access to the bubble menu and table toolbar (Tab to enter, arrow keys to navigate, Escape to return), `aria-label`/`aria-pressed` on every toolbar/popover button, `role="textbox"` and a new `ariaLabel` prop on the editing surface, `role="listbox"`/`role="option"` with dynamic `aria-activedescendant` on the `/` command menu, a visible focus ring on the editor and all keyboard-focusable buttons, and an alt-text field in the image-insert popover.
 - `jsx-a11y` oxlint rules enabled to catch accessibility regressions going forward.
+- `getText()` — plain-text content extraction (no HTML/Markdown), preserving block boundaries as newlines.
+- `getDocumentStats()` — word/character count, estimated reading time, and link/image/table counts from an HTML string.
+- `getHeadingOutline()` — h1-h6 outline extraction (`{ level, text, id? }[]`) for building a table of contents.
+- `editable` prop — reactive read-only/editable toggle, unlike the construction-only `extensions`/`initialContent` props.
+- `onSelectionUpdate`, `onFocus`, `onBlur` props for reacting to editor lifecycle events from the host app.
+- `createHighlightPlugin`/`setHighlightRanges` — a ProseMirror decoration plugin for highlighting arbitrary text ranges (e.g. AI style-check flags) as a pure visual overlay, registered post-mount via `getEditor()`. New `--cw-highlight-decoration` theming token.
+- Bulleted and numbered lists added to the `/` command menu.
 
 ### Fixed
 - Tab could not move focus out of the editor outside of a list (a real WCAG 2.1.2 keyboard trap) — Tab now either enters a visible floating toolbar or leaves the editor normally.
 - Toolbar/popover text contrast (`--cw-bubble-text`) raised to meet WCAG AA (4.5:1) against the default background.
+- `htmlToMarkdown` no longer drops link URLs — `<a href>` now converts to `[text](href)` instead of losing the link entirely.
+- `htmlToMarkdown` now numbers ordered lists (`1.`/`2.`/`3.`) instead of flattening them to unordered bullets.
+
+### Documentation
+- Noted that chain-writing does not sanitize HTML anywhere (`getHTML()`/`getJSON()`/`setContent()` are raw passthroughs) — sanitizing untrusted content before `setContent()` is the host's responsibility.
 
 ## [0.2.0] - 2026-08-23
 

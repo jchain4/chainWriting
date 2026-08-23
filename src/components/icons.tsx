@@ -3,9 +3,9 @@ import type { SVGProps } from 'react'
 // Small inline icons for the "/" command menu. No icon library dependency —
 // the text-glyph icons (headings/quote) reuse the exact self-formatting-label
 // language already established by the bubble menu's own buttons (see
-// .cw-bubble-menu button[data-format="..."] in editor.css); only
-// link/image/table get genuine pictorial line icons, since those don't have
-// a natural single-character representation.
+// .cw-bubble-menu button[data-format="..."] in editor.css); the rest
+// (link/image/table/lists) get genuine pictorial line icons, since those
+// don't have a natural single-character representation.
 //
 // Inline text-formatting toggles (bold/italic/underline/strike) live only in
 // the bubble menu, not here — the "/" menu is reserved for inserting
@@ -42,6 +42,32 @@ export function IconHeadings() {
       <line x1="3" y1="5" x2="15" y2="5" />
       <line x1="3" y1="9" x2="12" y2="9" />
       <line x1="3" y1="13" x2="9" y2="13" />
+    </svg>
+  )
+}
+
+export function IconBulletList() {
+  return (
+    <svg viewBox="0 0 18 18" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+      <circle cx="3" cy="5" r="1" fill="currentColor" stroke="none" />
+      <circle cx="3" cy="9" r="1" fill="currentColor" stroke="none" />
+      <circle cx="3" cy="13" r="1" fill="currentColor" stroke="none" />
+      <line x1="7" y1="5" x2="15" y2="5" />
+      <line x1="7" y1="9" x2="15" y2="9" />
+      <line x1="7" y1="13" x2="15" y2="13" />
+    </svg>
+  )
+}
+
+export function IconOrderedList() {
+  return (
+    <svg viewBox="0 0 18 18" width="16" height="16" aria-hidden="true">
+      <text x="3" y="6.5" textAnchor="middle" fontSize="5.5" fill="currentColor">1</text>
+      <text x="3" y="10.5" textAnchor="middle" fontSize="5.5" fill="currentColor">2</text>
+      <text x="3" y="14.5" textAnchor="middle" fontSize="5.5" fill="currentColor">3</text>
+      <line x1="7" y1="5" x2="15" y2="5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <line x1="7" y1="9" x2="15" y2="9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <line x1="7" y1="13" x2="15" y2="13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
     </svg>
   )
 }
