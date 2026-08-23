@@ -1,8 +1,27 @@
 import { createRef } from 'react'
-import { render, waitFor } from '@testing-library/react'
+import { fireEvent, render, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { Extension } from '@tiptap/react'
 import { Editor, type EditorHandle } from './Editor'
+
+function mockSelectionRect() {
+  // jsdom implements neither Range.prototype.getBoundingClientRect nor
+  // getClientRects (the latter is hit internally by ProseMirror's
+  // coordsAtPos, used by Tiptap's default scroll-into-view-on-focus
+  // behavior) — assign both directly, and restore afterwards.
+  const rect = {
+    width: 100, height: 20, top: 100, bottom: 120, left: 0, right: 100, x: 0, y: 100,
+    toJSON: () => {},
+  } as DOMRect
+  const originalRect = Range.prototype.getBoundingClientRect
+  const originalRects = Range.prototype.getClientRects
+  Range.prototype.getBoundingClientRect = vi.fn(() => rect) as typeof Range.prototype.getBoundingClientRect
+  Range.prototype.getClientRects = vi.fn(() => [rect]) as unknown as typeof Range.prototype.getClientRects
+  return () => {
+    Range.prototype.getBoundingClientRect = originalRect
+    Range.prototype.getClientRects = originalRects
+  }
+}
 
 async function renderReadyEditor(props: Partial<React.ComponentProps<typeof Editor>> = {}) {
   const ref = createRef<EditorHandle>()
@@ -107,5 +126,80 @@ describe('Editor', () => {
 
     editor.chain().focus().deleteTable().run()
     expect(ref.current!.getHTML()).not.toContain('<table')
+  })
+
+  describe('accessibility', () => {
+    it('does not preventDefault on Tab when no floating toolbar is visible (keyboard-trap regression guard)', async () => {
+      const { ref } = await renderReadyEditor()
+      const dom = ref.current!.getEditor()!.view.dom
+      const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+      dom.dispatchEvent(event)
+      expect(event.defaultPrevented).toBe(false)
+    })
+
+    // These two use the table toolbar rather than the bubble menu: its
+    // visibility is driven purely by editor.isActive('table') (ProseMirror
+    // state), with no dependency on window.getSelection()/Range sync — the
+    // bubble menu's visibility check does depend on that, and jsdom's timing
+    // for it proved unreliable in isolation even though the underlying
+    // useRovingToolbar/handleKeyDown mechanism is identical either way.
+    it('Tab moves DOM focus to the table toolbar when visible, and Escape returns it to the editor', async () => {
+      const { ref, container } = await renderReadyEditor()
+      const editor = ref.current!.getEditor()!
+
+      editor.chain().focus().insertTable({ rows: 2, cols: 2, withHeaderRow: true }).run()
+      await waitFor(() => expect(container.querySelector('.cw-table-menu')).toBeInTheDocument())
+
+      const dom = editor.view.dom
+      const tabEvent = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+      dom.dispatchEvent(tabEvent)
+
+      expect(tabEvent.defaultPrevented).toBe(true)
+      const firstButton = container.querySelector('.cw-table-menu button')
+      await waitFor(() => expect(document.activeElement).toBe(firstButton))
+
+      fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
+      await waitFor(() => expect(document.activeElement).toBe(dom))
+    })
+
+    it('arrow keys move roving focus between table toolbar buttons', async () => {
+      const { ref, container } = await renderReadyEditor()
+      const editor = ref.current!.getEditor()!
+
+      editor.chain().focus().insertTable({ rows: 2, cols: 2, withHeaderRow: true }).run()
+      await waitFor(() => expect(container.querySelector('.cw-table-menu')).toBeInTheDocument())
+
+      editor.view.dom.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }))
+      const buttons = container.querySelectorAll('.cw-table-menu button')
+      await waitFor(() => expect(document.activeElement).toBe(buttons[0]))
+
+      fireEvent.keyDown(document.activeElement!, { key: 'ArrowRight' })
+      expect(document.activeElement).toBe(buttons[1])
+      expect(buttons[1].getAttribute('tabindex')).toBe('0')
+      expect(buttons[0].getAttribute('tabindex')).toBe('-1')
+    })
+
+    it('aria-pressed on the bold button reflects the active formatting state', async () => {
+      const restoreRect = mockSelectionRect()
+      const { ref, container, rerender } = await renderReadyEditor({ initialContent: '<p>hello world</p>' })
+      const editor = ref.current!.getEditor()!
+
+      editor.chain().focus().setTextSelection({ from: 1, to: 6 }).run()
+      await waitFor(() => expect(container.querySelector('.cw-bubble-menu')).toBeInTheDocument())
+
+      const boldButton = container.querySelector('.cw-bubble-menu button[data-format="bold"]')!
+      expect(boldButton.getAttribute('aria-pressed')).toBe('false')
+
+      editor.chain().focus().toggleBold().run()
+      // Toggling a mark without moving the selection doesn't fire Tiptap's
+      // own selectionUpdate event (it only fires on an actual selection
+      // change), so nothing re-renders BubbleToolbar on its own — in real
+      // usage this is masked by the host re-rendering on `onChange`. Force
+      // that same re-render here rather than relying on onChange plumbing.
+      rerender(<Editor ref={ref} initialContent="<p>hello world</p>" />)
+      await waitFor(() => expect(boldButton.getAttribute('aria-pressed')).toBe('true'))
+
+      restoreRect()
+    })
   })
 })

@@ -14,7 +14,7 @@
   --cw-bubble-shadow:      0 8px 28px rgba(0, 0, 0, 0.45),
                            0 2px 6px  rgba(0, 0, 0, 0.3),
                            inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  --cw-bubble-text:        rgba(255, 255, 255, 0.42);
+  --cw-bubble-text:        rgba(255, 255, 255, 0.48); /* ≥4.5:1 against --cw-bubble-bg (WCAG AA) */
   --cw-bubble-text-hover:  rgba(255, 255, 255, 0.92);
   --cw-bubble-text-active: #e8e6e3;
   --cw-bubble-hover-bg:    rgba(255, 255, 255, 0.07);
@@ -28,6 +28,8 @@
   --cw-table-border:           rgba(255, 255, 255, 0.14);
   --cw-table-header-bg:        rgba(255, 255, 255, 0.05);
   --cw-table-cell-selected-bg: rgba(99, 102, 241, 0.18);
+
+  --cw-focus-ring: 0 0 0 2px rgba(99, 102, 241, 0.6);
 }
 
 /* ── Shared entry animation ── */
@@ -49,13 +51,13 @@
   display: flex;
   align-items: center;
   gap: 0;
-  padding: 3px 4px;
+  padding: 5px 6px;
   background: var(--cw-bubble-bg);
   backdrop-filter: blur(14px) saturate(180%);
   -webkit-backdrop-filter: blur(14px) saturate(180%);
   border: 1px solid var(--cw-bubble-border);
   box-shadow: var(--cw-bubble-shadow);
-  border-radius: 4px;
+  border-radius: 10px;
   z-index: 100;
   animation: cw-float-in 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
@@ -77,9 +79,9 @@
   font-size: 11.5px;
   font-weight: 500;
   letter-spacing: 0;
-  padding: 5px 8px;
+  padding: 6px 10px;
   line-height: 1;
-  border-radius: 3px;
+  border-radius: 7px;
   transition: color 0.1s, background 0.1s;
   white-space: nowrap;
 }
@@ -92,6 +94,13 @@
 .cw-bubble-menu button.is-active {
   color: var(--cw-bubble-text-active);
   background: var(--cw-bubble-active-bg);
+}
+
+.cw-bubble-menu button:focus-visible {
+  color: var(--cw-bubble-text-hover);
+  background: var(--cw-bubble-active-bg);
+  box-shadow: var(--cw-focus-ring);
+  outline: none;
 }
 
 /* Self-formatting labels */
@@ -166,13 +175,13 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 5px 6px;
+  padding: 6px 8px;
   background: var(--cw-bubble-bg);
   backdrop-filter: blur(14px) saturate(180%);
   -webkit-backdrop-filter: blur(14px) saturate(180%);
   border: 1px solid var(--cw-bubble-border);
   box-shadow: var(--cw-bubble-shadow);
-  border-radius: 4px;
+  border-radius: 10px;
   animation: cw-float-in 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
@@ -186,7 +195,7 @@
 .cw-link-input {
   background: var(--cw-bubble-hover-bg);
   border: 1px solid var(--cw-bubble-border);
-  border-radius: 3px;
+  border-radius: 7px;
   color: var(--cw-bubble-text-hover);
   font-size: 12px;
   font-family: inherit;
@@ -211,9 +220,14 @@
   cursor: pointer;
   font-size: 12px;
   padding: 4px 7px;
-  border-radius: 3px;
+  border-radius: 7px;
   line-height: 1;
   transition: color 0.1s, background 0.1s;
+}
+
+.cw-link-btn:focus-visible {
+  box-shadow: var(--cw-focus-ring);
+  outline: none;
 }
 
 .cw-link-apply {
@@ -240,13 +254,13 @@
   display: flex;
   flex-direction: column;
   min-width: 140px;
-  padding: 4px;
+  padding: 6px;
   background: var(--cw-bubble-bg);
   backdrop-filter: blur(14px) saturate(180%);
   -webkit-backdrop-filter: blur(14px) saturate(180%);
   border: 1px solid var(--cw-bubble-border);
   box-shadow: var(--cw-bubble-shadow);
-  border-radius: 6px;
+  border-radius: 10px;
   z-index: 100;
   animation: cw-float-in-menu 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
@@ -269,8 +283,8 @@
   color: var(--cw-bubble-text);
   cursor: pointer;
   font-size: 12px;
-  padding: 6px 8px;
-  border-radius: 3px;
+  padding: 7px 10px;
+  border-radius: 7px;
   transition: color 0.1s, background 0.1s;
 }
 
@@ -285,6 +299,11 @@
   font-size: 12px;
   color: var(--cw-bubble-text);
 }
+
+/* No :focus-visible rule here on purpose: slash-menu items never receive
+   real DOM focus (tabIndex is permanently -1) — the highlighted item is
+   conveyed via aria-activedescendant on the contenteditable element
+   instead, since focus stays there while the user types. */
 
 /* ── Placeholder ── */
 
@@ -305,6 +324,16 @@
   font: inherit;
   color: inherit;
   line-height: inherit;
+  border-radius: 6px;
+}
+
+/* :focus-visible support on contenteditable is inconsistent across browsers
+   (notably Safari), so the plain :focus fallback trades a slightly wider
+   "ring shows on click too" for guaranteed visibility everywhere — the
+   safer default for a WCAG 2.4.7 fix. */
+.ProseMirror:focus-visible,
+.ProseMirror:focus {
+  box-shadow: var(--cw-focus-ring);
 }
 
 /* ── Links ── */
@@ -328,7 +357,7 @@
   max-width: 100%;
   display: block;
   margin: 0.5em 0;
-  border-radius: 4px;
+  border-radius: 8px;
 }
 
 .ProseMirror img[data-upload-id] {

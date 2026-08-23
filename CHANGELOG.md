@@ -12,6 +12,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `--cw-table-border`, `--cw-table-header-bg`, `--cw-table-cell-selected-bg` theming tokens.
 - Pasting HTML containing images or tables (e.g. from Google Docs) is now preserved instead of being flattened to plain text.
 - `htmlToMarkdown` now converts images and tables to their Markdown equivalents.
+- Accessibility: keyboard access to the bubble menu and table toolbar (Tab to enter, arrow keys to navigate, Escape to return), `aria-label`/`aria-pressed` on every toolbar/popover button, `role="textbox"` and a new `ariaLabel` prop on the editing surface, `role="listbox"`/`role="option"` with dynamic `aria-activedescendant` on the `/` command menu, a visible focus ring on the editor and all keyboard-focusable buttons, and an alt-text field in the image-insert popover.
+- `jsx-a11y` oxlint rules enabled to catch accessibility regressions going forward.
+
+### Fixed
+- Tab could not move focus out of the editor outside of a list (a real WCAG 2.1.2 keyboard trap) — Tab now either enters a visible floating toolbar or leaves the editor normally.
+- Toolbar/popover text contrast (`--cw-bubble-text`) raised to meet WCAG AA (4.5:1) against the default background.
 
 ## [0.2.0] - 2026-08-23
 

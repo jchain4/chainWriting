@@ -1,6 +1,7 @@
 'use client'
 
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useId, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -15,6 +16,7 @@ import { mergeExtensions } from '../lib/extensions'
 import { UploadableImage } from '../lib/imageExtension'
 import { insertImageWithUpload } from '../lib/imageUpload'
 import { SlashCommand, type SlashCommandItem, type SlashCommandState, type SlashKeyHandler } from '../lib/slashCommandExtension'
+import { useRovingToolbar, type RovingToolbarHandle } from '../hooks/useRovingToolbar'
 import '../editor.css'
 
 export interface EditorProps {
@@ -41,6 +43,14 @@ export interface EditorProps {
    * rather than silently embedded as base64.
    */
   onImageUpload?: (file: File) => Promise<string>
+  /**
+   * Accessible name for the editing surface, exposed via aria-label on the
+   * contenteditable element (role="textbox"). Falls back to `placeholder`
+   * when omitted, so there is always a non-empty accessible name. Like
+   * `placeholder`, read once at construction — changing it after mount has
+   * no effect on the live editor.
+   */
+  ariaLabel?: string
 }
 
 export interface EditorHandle {
@@ -74,7 +84,7 @@ interface LinkPopoverState {
 
 // ── Bubble position hook ────────────────────────────────────────────────────
 
-function useBubblePos(editor: TiptapEditor | null) {
+function useBubblePos(editor: TiptapEditor | null, toolbarRef: RefObject<HTMLDivElement | null>) {
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(null)
 
   useEffect(() => {
@@ -92,8 +102,15 @@ function useBubblePos(editor: TiptapEditor | null) {
     }
     // Delay blur-clear so onMouseDown/onPointerDown handlers on bubble buttons
     // can fire before the bubble unmounts (native pointerdown fires before mousedown).
+    // Also don't hide it if focus moved INTO the toolbar itself (keyboard
+    // users tabbing/arrow-navigating into it trigger the editor's own blur).
     let blurTimer: ReturnType<typeof setTimeout>
-    const clear = () => { blurTimer = setTimeout(() => setCoords(null), 150) }
+    const clear = () => {
+      blurTimer = setTimeout(() => {
+        if (toolbarRef.current?.contains(document.activeElement)) return
+        setCoords(null)
+      }, 150)
+    }
     const cancelClear = () => clearTimeout(blurTimer)
     editor.on('selectionUpdate', update)
     editor.on('blur', clear)
@@ -104,37 +121,48 @@ function useBubblePos(editor: TiptapEditor | null) {
       editor.off('blur', clear)
       editor.off('focus', cancelClear)
     }
-  }, [editor])
+  }, [editor, toolbarRef])
 
   return coords
 }
 
 // ── Bubble toolbar ──────────────────────────────────────────────────────────
 
-function BubbleToolbar({
-  editor,
-  onLinkClick,
-}: {
+const BubbleToolbar = forwardRef<RovingToolbarHandle, {
   editor: TiptapEditor
   onLinkClick: (editor: TiptapEditor) => void
-}) {
-  const coords = useBubblePos(editor)
+}>(function BubbleToolbar({ editor, onLinkClick }, ref) {
+  const toolbarRef = useRef<HTMLDivElement>(null)
+  const coords = useBubblePos(editor, toolbarRef)
+  const roving = useRovingToolbar({
+    count: 8,
+    active: coords !== null,
+    onEscape: () => editor.chain().focus().run(),
+  })
+  useImperativeHandle(ref, () => ({ focusFirst: roving.focusFirst }), [roving.focusFirst])
+
   if (!coords) return null
 
   const btn = (
+    index: number,
     label: string,
     format: string,
     active: boolean,
     action: () => void,
     title: string,
+    ariaLabel: string,
   ) => (
     <button
       key={format}
+      ref={roving.registerButton(index)}
       data-format={format}
       className={active ? 'is-active' : ''}
-      tabIndex={-1}
+      tabIndex={roving.getTabIndex(index)}
+      onKeyDown={roving.onButtonKeyDown(index)}
       onPointerDown={(e) => { e.preventDefault(); action() }}
       title={title}
+      aria-label={ariaLabel}
+      aria-pressed={active}
     >
       {label}
     </button>
@@ -143,21 +171,22 @@ function BubbleToolbar({
   const sep = () => <div className="cw-bubble-menu__divider" />
 
   return (
-    <div className="cw-bubble-menu" style={{ position: 'fixed', top: coords.top, left: coords.left }}>
-      {btn('B', 'bold',      editor.isActive('bold'),      () => editor.chain().focus().toggleBold().run(),      'Negrita (Ctrl+B)')}
-      {btn('I', 'italic',    editor.isActive('italic'),    () => editor.chain().focus().toggleItalic().run(),    'Cursiva (Ctrl+I)')}
-      {btn('U', 'underline', editor.isActive('underline'), () => editor.chain().focus().toggleUnderline().run(), 'Subrayado (Ctrl+U)')}
-      {btn('S', 'strike',    editor.isActive('strike'),    () => editor.chain().focus().toggleStrike().run(),    'Tachado')}
+    <div ref={toolbarRef} role="toolbar" aria-label="Formato de texto" className="cw-bubble-menu" style={{ position: 'fixed', top: coords.top, left: coords.left }}>
+      {btn(0, 'B', 'bold',      editor.isActive('bold'),      () => editor.chain().focus().toggleBold().run(),      'Negrita (Ctrl+B)', 'Negrita')}
+      {btn(1, 'I', 'italic',    editor.isActive('italic'),    () => editor.chain().focus().toggleItalic().run(),    'Cursiva (Ctrl+I)', 'Cursiva')}
+      {btn(2, 'U', 'underline', editor.isActive('underline'), () => editor.chain().focus().toggleUnderline().run(), 'Subrayado (Ctrl+U)', 'Subrayado')}
+      {btn(3, 'S', 'strike',    editor.isActive('strike'),    () => editor.chain().focus().toggleStrike().run(),    'Tachado', 'Tachado')}
       {sep()}
-      {btn('H2', 'h2', editor.isActive('heading', { level: 2 }), () => editor.chain().focus().toggleHeading({ level: 2 }).run(), 'Encabezado 2')}
-      {btn('H3', 'h3', editor.isActive('heading', { level: 3 }), () => editor.chain().focus().toggleHeading({ level: 3 }).run(), 'Encabezado 3')}
+      {btn(4, 'H2', 'h2', editor.isActive('heading', { level: 2 }), () => editor.chain().focus().toggleHeading({ level: 2 }).run(), 'Encabezado 2', 'Encabezado 2')}
+      {btn(5, 'H3', 'h3', editor.isActive('heading', { level: 3 }), () => editor.chain().focus().toggleHeading({ level: 3 }).run(), 'Encabezado 3', 'Encabezado 3')}
       {sep()}
-      {btn('"', 'blockquote', editor.isActive('blockquote'), () => editor.chain().focus().toggleBlockquote().run(), 'Cita')}
+      {btn(6, '"', 'blockquote', editor.isActive('blockquote'), () => editor.chain().focus().toggleBlockquote().run(), 'Cita', 'Cita')}
       {sep()}
-      {btn('↗', 'link', editor.isActive('link'), () => onLinkClick(editor), 'Enlace (Ctrl+K)')}
+      {btn(7, '↗', 'link', editor.isActive('link'), () => onLinkClick(editor), 'Enlace (Ctrl+K)', 'Enlace')}
     </div>
   )
-}
+})
+BubbleToolbar.displayName = 'BubbleToolbar'
 
 // ── Link popover ────────────────────────────────────────────────────────────
 
@@ -201,6 +230,7 @@ function LinkPopover({
         value={url}
         className="cw-link-input"
         placeholder="https://"
+        aria-label="URL del enlace"
         onChange={(e) => setUrl(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') { e.preventDefault(); onApply(url) }
@@ -210,7 +240,7 @@ function LinkPopover({
       <button
         className="cw-link-btn cw-link-apply"
         title="Aplicar (Enter)"
-        tabIndex={-1}
+        aria-label="Aplicar enlace"
         onPointerDown={(e) => { e.preventDefault(); onApply(url) }}
       >
         ↵
@@ -219,7 +249,7 @@ function LinkPopover({
         <button
           className="cw-link-btn cw-link-remove"
           title="Eliminar enlace"
-          tabIndex={-1}
+          aria-label="Eliminar enlace"
           onPointerDown={(e) => { e.preventDefault(); onApply('') }}
         >
           ✕
@@ -234,14 +264,26 @@ function LinkPopover({
 const SlashMenu = forwardRef<SlashKeyHandler, {
   items: SlashCommandItem[]
   coords: { top: number; left: number }
+  listboxId: string
   onSelect: (item: SlashCommandItem) => void
   onClose: () => void
-}>(function SlashMenu({ items, coords, onSelect, onClose }, ref) {
+  onHighlightChange: (id: string | null) => void
+}>(function SlashMenu({ items, coords, listboxId, onSelect, onClose, onHighlightChange }, ref) {
   const [selected, setSelected] = useState(0)
 
   // Reset the highlighted item whenever the filtered list changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { setSelected(0) }, [items])
+
+  // Focus never moves into this menu (it's driven by typed text while the
+  // contenteditable stays focused, Notion-style), so the highlighted item
+  // is exposed to assistive tech via aria-activedescendant on the editable
+  // element itself — see the effect near the editor's useEditor() call.
+  useEffect(() => {
+    onHighlightChange(items[selected] ? `${listboxId}-option-${items[selected].id}` : null)
+  }, [items, selected, listboxId, onHighlightChange])
+
+  useEffect(() => () => onHighlightChange(null), [onHighlightChange])
 
   useImperativeHandle(ref, () => ({
     onKeyDown: (event) => {
@@ -255,13 +297,16 @@ const SlashMenu = forwardRef<SlashKeyHandler, {
   }), [items, selected, onSelect, onClose])
 
   return (
-    <div className="cw-slash-menu" style={{ position: 'fixed', top: coords.top, left: coords.left }}>
+    <div id={listboxId} role="listbox" aria-label="Comandos" className="cw-slash-menu" style={{ position: 'fixed', top: coords.top, left: coords.left }}>
       {items.length === 0 ? (
         <div className="cw-slash-menu__empty">Sin resultados</div>
       ) : (
         items.map((item, i) => (
           <button
             key={item.id}
+            id={`${listboxId}-option-${item.id}`}
+            role="option"
+            aria-selected={i === selected}
             className={i === selected ? 'is-active' : ''}
             tabIndex={-1}
             onPointerEnter={() => setSelected(i)}
@@ -310,15 +355,25 @@ function useTableToolbarPos(editor: TiptapEditor | null) {
   return coords
 }
 
-function TableToolbar({ editor }: { editor: TiptapEditor }) {
+const TableToolbar = forwardRef<RovingToolbarHandle, { editor: TiptapEditor }>(function TableToolbar({ editor }, ref) {
   const coords = useTableToolbarPos(editor)
+  const roving = useRovingToolbar({
+    count: 5,
+    active: coords !== null,
+    onEscape: () => editor.chain().focus().run(),
+  })
+  useImperativeHandle(ref, () => ({ focusFirst: roving.focusFirst }), [roving.focusFirst])
+
   if (!coords) return null
 
-  const btn = (label: string, title: string, action: () => void) => (
+  const btn = (index: number, label: string, title: string, ariaLabel: string, action: () => void) => (
     <button
       key={title}
-      tabIndex={-1}
+      ref={roving.registerButton(index)}
+      tabIndex={roving.getTabIndex(index)}
+      onKeyDown={roving.onButtonKeyDown(index)}
       title={title}
+      aria-label={ariaLabel}
       onPointerDown={(e) => { e.preventDefault(); action() }}
     >
       {label}
@@ -326,17 +381,18 @@ function TableToolbar({ editor }: { editor: TiptapEditor }) {
   )
 
   return (
-    <div className="cw-bubble-menu cw-table-menu" style={{ position: 'fixed', top: coords.top, left: coords.left }}>
-      {btn('+Fila', 'Añadir fila', () => editor.chain().focus().addRowAfter().run())}
-      {btn('+Col', 'Añadir columna', () => editor.chain().focus().addColumnAfter().run())}
+    <div role="toolbar" aria-label="Tabla" className="cw-bubble-menu cw-table-menu" style={{ position: 'fixed', top: coords.top, left: coords.left }}>
+      {btn(0, '+Fila', 'Añadir fila', 'Añadir fila', () => editor.chain().focus().addRowAfter().run())}
+      {btn(1, '+Col', 'Añadir columna', 'Añadir columna', () => editor.chain().focus().addColumnAfter().run())}
       <div className="cw-bubble-menu__divider" />
-      {btn('−Fila', 'Eliminar fila', () => editor.chain().focus().deleteRow().run())}
-      {btn('−Col', 'Eliminar columna', () => editor.chain().focus().deleteColumn().run())}
+      {btn(2, '−Fila', 'Eliminar fila', 'Eliminar fila', () => editor.chain().focus().deleteRow().run())}
+      {btn(3, '−Col', 'Eliminar columna', 'Eliminar columna', () => editor.chain().focus().deleteColumn().run())}
       <div className="cw-bubble-menu__divider" />
-      {btn('✕', 'Eliminar tabla', () => editor.chain().focus().deleteTable().run())}
+      {btn(4, '✕', 'Eliminar tabla', 'Eliminar tabla', () => editor.chain().focus().deleteTable().run())}
     </div>
   )
-}
+})
+TableToolbar.displayName = 'TableToolbar'
 
 // ── Image insert popover ────────────────────────────────────────────────────
 
@@ -354,11 +410,12 @@ function ImageInsertPopover({
 }: {
   state: ImageInsertState
   canUpload: boolean
-  onInsertUrl: (url: string) => void
-  onUploadClick: () => void
+  onInsertUrl: (url: string, alt: string) => void
+  onUploadClick: (alt: string) => void
   onClose: () => void
 }) {
   const [url, setUrl] = useState('')
+  const [alt, setAlt] = useState('')
   const ref = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -378,7 +435,12 @@ function ImageInsertPopover({
 
   const submit = () => {
     const trimmed = url.trim()
-    if (trimmed) onInsertUrl(trimmed)
+    if (trimmed) onInsertUrl(trimmed, alt)
+  }
+
+  const handleFieldKeyDown = (e: ReactKeyboardEvent) => {
+    if (e.key === 'Enter') { e.preventDefault(); submit() }
+    if (e.key === 'Escape') { e.preventDefault(); onClose() }
   }
 
   return (
@@ -393,16 +455,23 @@ function ImageInsertPopover({
         value={url}
         className="cw-link-input"
         placeholder="https://…"
+        aria-label="URL de la imagen"
         onChange={(e) => setUrl(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') { e.preventDefault(); submit() }
-          if (e.key === 'Escape') { e.preventDefault(); onClose() }
-        }}
+        onKeyDown={handleFieldKeyDown}
+      />
+      <input
+        type="text"
+        value={alt}
+        className="cw-link-input"
+        placeholder="Texto alternativo (opcional)"
+        aria-label="Texto alternativo"
+        onChange={(e) => setAlt(e.target.value)}
+        onKeyDown={handleFieldKeyDown}
       />
       <button
         className="cw-link-btn cw-link-apply"
         title="Insertar (Enter)"
-        tabIndex={-1}
+        aria-label="Insertar imagen"
         onPointerDown={(e) => { e.preventDefault(); submit() }}
       >
         ↵
@@ -411,8 +480,8 @@ function ImageInsertPopover({
         <button
           className="cw-link-btn"
           title="Subir archivo"
-          tabIndex={-1}
-          onPointerDown={(e) => { e.preventDefault(); onUploadClick() }}
+          aria-label="Subir archivo"
+          onPointerDown={(e) => { e.preventDefault(); onUploadClick(alt) }}
         >
           ⤒
         </button>
@@ -431,13 +500,21 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   extensions,
   onChange,
   onImageUpload,
+  ariaLabel,
 }, ref) {
+  const accessibleName = ariaLabel || placeholder
   const rafRef = useRef<number | null>(null)
   const [linkState, setLinkState] = useState<LinkPopoverState | null>(null)
   const [imageInsertState, setImageInsertState] = useState<ImageInsertState | null>(null)
+  const [pendingUploadAlt, setPendingUploadAlt] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [slashState, setSlashState] = useState<SlashCommandState | null>(null)
+  const [slashHighlightId, setSlashHighlightId] = useState<string | null>(null)
   const slashMenuHandleRef = useRef<SlashKeyHandler>(null)
+  const bubbleToolbarRef = useRef<RovingToolbarHandle>(null)
+  const tableToolbarRef = useRef<RovingToolbarHandle>(null)
+  const instanceId = useId()
+  const slashListboxId = `cw-slash-${instanceId}`
 
   const slashItems = useMemo<SlashCommandItem[]>(() => [
     {
@@ -503,13 +580,29 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     extensions: mergedExtensions,
     content: initialContent,
     editorProps: {
+      attributes: {
+        role: 'textbox',
+        'aria-multiline': 'true',
+        'aria-label': accessibleName,
+        'aria-haspopup': 'listbox',
+      },
       handleKeyDown: (view, event) => {
-        if (event.key === 'Tab') {
+        if (event.key === 'Tab' && !event.shiftKey) {
           const isInList = view.state.selection.$head.parent.type.name === 'listItem'
-          if (!isInList) {
+          if (isInList) return false // StarterKit's list keymap sinks/lifts the item
+
+          // If a floating toolbar (bubble menu / table toolbar) is visible,
+          // Tab jumps focus into it instead of leaving the document — the
+          // same convention used by Medium and similar contextual-toolbar
+          // editors. Without a toolbar visible, don't intercept: falling
+          // through lets the browser's native contenteditable tab-navigation
+          // move focus off the editor (WCAG 2.1.2 — Tab must never be a
+          // silent no-op here).
+          if (bubbleToolbarRef.current?.focusFirst() || tableToolbarRef.current?.focusFirst()) {
             event.preventDefault()
             return true
           }
+          return false
         }
         return false
       },
@@ -552,15 +645,33 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     },
   })
 
-  const handleImageFile = useCallback((file: File) => {
+  const handleImageFile = useCallback((file: File, alt?: string) => {
     if (!editor || !onImageUpload) return
-    insertImageWithUpload(editor, file, onImageUpload)
+    insertImageWithUpload(editor, file, onImageUpload, { alt })
   }, [editor, onImageUpload])
 
-  const insertImageUrl = useCallback((url: string) => {
-    editor?.chain().focus().setImage({ src: url }).run()
+  const insertImageUrl = useCallback((url: string, alt: string) => {
+    editor?.chain().focus().setImage({ src: url, alt }).run()
     setImageInsertState(null)
   }, [editor])
+
+  // Keep the editable element's dynamic ARIA state in sync with the slash
+  // menu — editorProps.attributes is fixed at useEditor() construction time,
+  // so this part can't be re-supplied reactively and is set imperatively.
+  useEffect(() => {
+    if (!editor) return
+    const dom = editor.view.dom
+    const isOpen = !!slashState?.coords
+    dom.setAttribute('aria-expanded', String(isOpen))
+    if (isOpen) {
+      dom.setAttribute('aria-controls', slashListboxId)
+      if (slashHighlightId) dom.setAttribute('aria-activedescendant', slashHighlightId)
+      else dom.removeAttribute('aria-activedescendant')
+    } else {
+      dom.removeAttribute('aria-controls')
+      dom.removeAttribute('aria-activedescendant')
+    }
+  }, [editor, slashState, slashHighlightId, slashListboxId])
 
   const openLink = useCallback((ed: TiptapEditor) => {
     const { from, to } = ed.state.selection
@@ -583,11 +694,13 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     if (!editor || !linkState) return
     const { from, to } = linkState
     const trimmed = url.trim()
+    const chain = editor.chain().setTextSelection({ from, to })
     if (trimmed) {
-      editor.chain().setTextSelection({ from, to }).setLink({ href: trimmed }).run()
+      chain.setLink({ href: trimmed })
     } else if (linkState.initialUrl) {
-      editor.chain().setTextSelection({ from, to }).unsetLink().run()
+      chain.unsetLink()
     }
+    chain.focus().run()
     setLinkState(null)
   }, [editor, linkState])
 
@@ -625,16 +738,17 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     <div className={`cw-editor${className ? ` ${className}` : ''}`}>
       {editor && (
         <BubbleToolbar
+          ref={bubbleToolbarRef}
           editor={editor}
           onLinkClick={openLink}
         />
       )}
-      {editor && <TableToolbar editor={editor} />}
+      {editor && <TableToolbar ref={tableToolbarRef} editor={editor} />}
       {linkState && (
         <LinkPopover
           state={linkState}
           onApply={applyLink}
-          onClose={() => setLinkState(null)}
+          onClose={() => { setLinkState(null); editor?.chain().focus().run() }}
         />
       )}
       {slashState?.coords && (
@@ -642,8 +756,10 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
           ref={slashMenuHandleRef}
           items={slashState.items}
           coords={slashState.coords}
+          listboxId={slashListboxId}
           onSelect={(item) => slashState.select(item)}
           onClose={() => setSlashState(null)}
+          onHighlightChange={setSlashHighlightId}
         />
       )}
       {imageInsertState && (
@@ -651,8 +767,8 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
           state={imageInsertState}
           canUpload={!!onImageUpload}
           onInsertUrl={insertImageUrl}
-          onUploadClick={() => fileInputRef.current?.click()}
-          onClose={() => setImageInsertState(null)}
+          onUploadClick={(alt) => { setPendingUploadAlt(alt); fileInputRef.current?.click() }}
+          onClose={() => { setImageInsertState(null); editor?.chain().focus().run() }}
         />
       )}
       <input
@@ -662,7 +778,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
         style={{ display: 'none' }}
         onChange={(e) => {
           const file = e.target.files?.[0]
-          if (file) handleImageFile(file)
+          if (file) handleImageFile(file, pendingUploadAlt)
           e.target.value = ''
           setImageInsertState(null)
         }}

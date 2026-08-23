@@ -12,7 +12,7 @@ Embeddable rich-text editor component for long-form writing. Built with Tiptap v
 - **Smart typography** — em dashes, curly quotes, ellipsis via Tiptap Typography extension
 - **Link support** — inline popover (Ctrl+K or ↗ button), autolink, remove button
 - **Bubble menu** — appears on text selection with animated frosted-glass design; self-formatting labels (B is bold, I is italic, etc.)
-- **Keyboard shortcuts** — Ctrl+B/I/U, Ctrl+K for links, Tab trapped inside editor
+- **Keyboard shortcuts** — Ctrl+B/I/U, Ctrl+K for links, Tab jumps into the floating toolbar when one is visible (arrow keys to navigate, Escape to return)
 - **Typewriter mode** — cursor stays vertically centered while typing
 - **Rich content** — images (by URL or file upload) and tables, inserted via a `/` slash-command menu
 - **Stateless** — Editor holds no storage; the host app receives HTML via `onChange`
@@ -65,6 +65,7 @@ function App() {
 | `extensions` | `AnyExtension[]` | — | Extra Tiptap extensions merged into the built-in set — see "Customizing extensions" |
 | `onChange` | `(html: string) => void` | — | Called on every content change |
 | `onImageUpload` | `(file: File) => Promise<string>` | — | Enables file-based image insertion — see "Rich content" |
+| `ariaLabel` | `string` | falls back to `placeholder` | Accessible name for the editing surface — see "Accessibility" |
 | `ref` | `Ref<EditorHandle>` | — | Imperative handle — see "Imperative API" |
 
 ## Imperative API
@@ -161,6 +162,18 @@ Override any CSS variable on `.cw-editor` or a parent selector:
 ```
 
 Full token list is in `src/editor.css`.
+
+## Accessibility
+
+This section documents specific, fixed gaps — it isn't a formal WCAG conformance statement.
+
+**Keyboard**: Tab/Shift-Tab move focus into and out of the editor normally — the editor never traps keyboard focus. When the bubble menu or the table toolbar is visible, Tab moves focus into it instead (the same convention used by Medium and similar contextual-toolbar editors); arrow keys (plus Home/End) navigate between its buttons (WAI-ARIA APG "Toolbar" pattern), and Escape returns focus to the editor at the same cursor position. A further Tab from inside the toolbar continues to the next focusable element on the page rather than being trapped. Ctrl+B/I/U and Ctrl+K work regardless of whether a toolbar is focused.
+
+**Screen readers**: the editing surface exposes `role="textbox"` and `aria-multiline="true"`, with its accessible name coming from the `ariaLabel` prop (falling back to `placeholder`). Every icon/glyph-only button (bold, italic, headings, table actions, link/image popovers, etc.) has a real `aria-label` rather than relying on its visible glyph or `title`; the 8 text-formatting toggle buttons also expose `aria-pressed`. The floating toolbars are `role="toolbar"`. The `/` command menu exposes `role="listbox"`/`role="option"` with a dynamic `aria-activedescendant` on the editing surface itself, since focus stays there while you type — this is a pragmatic pattern (the same one used by several `@`-mention-style autocompletes over `contenteditable`), not a strict ARIA 1.2 `combobox`, so a strict validator may flag the `role="textbox"` + `aria-expanded` pairing even though it works well with NVDA/JAWS/VoiceOver in practice.
+
+**Color contrast & focus**: default toolbar text meets WCAG AA (≥4.5:1) against the default dark bubble background; the editing surface and every keyboard-focusable button show a visible focus ring (`--cw-focus-ring`, themeable like the rest of the tokens).
+
+**Images**: the image-insert popover has an alt-text field (optional — an empty value correctly marks the image as decorative rather than being forced non-empty).
 
 ## Development
 

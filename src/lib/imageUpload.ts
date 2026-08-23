@@ -1,6 +1,8 @@
 import type { Editor as TiptapEditor } from '@tiptap/react'
 
 export interface ImageUploadDeps {
+  /** Alt text for the inserted image. Falls back to the file name when omitted. */
+  alt?: string
   uuid?: () => string
   createObjectUrl?: (file: File) => string
   revokeObjectUrl?: (url: string) => void
@@ -23,8 +25,11 @@ export function insertImageWithUpload(
 
   const uploadId = uuid()
   const objectUrl = createObjectUrl(file)
+  // Preserves an explicitly empty string (decorative image) — only an
+  // omitted `alt` (undefined) falls back to the file name.
+  const alt = deps.alt ?? file.name
 
-  editor.chain().focus().insertPendingImage({ src: objectUrl, alt: file.name, uploadId }).run()
+  editor.chain().focus().insertPendingImage({ src: objectUrl, alt, uploadId }).run()
 
   onImageUpload(file)
     .then((url) => {

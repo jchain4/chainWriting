@@ -78,6 +78,29 @@ describe('insertImageWithUpload', () => {
     expect(deps.revokeObjectUrl).toHaveBeenCalledWith('blob:fake')
   })
 
+  it('uses the provided alt option instead of the file name when given', () => {
+    const editor = makeEditor()
+    const deps = makeDeps()
+    const onImageUpload = vi.fn(() => new Promise<string>(() => {}))
+    const file = new File(['x'], 'IMG_20260823.png', { type: 'image/png' })
+
+    insertImageWithUpload(editor, file, onImageUpload, { ...deps, alt: 'A sunset over the bay' })
+
+    expect(editor.getHTML()).toContain('alt="A sunset over the bay"')
+    expect(editor.getHTML()).not.toContain('IMG_20260823.png')
+  })
+
+  it('falls back to the file name when alt is omitted', () => {
+    const editor = makeEditor()
+    const deps = makeDeps()
+    const onImageUpload = vi.fn(() => new Promise<string>(() => {}))
+    const file = new File(['x'], 'IMG_20260823.png', { type: 'image/png' })
+
+    insertImageWithUpload(editor, file, onImageUpload, deps)
+
+    expect(editor.getHTML()).toContain('alt="IMG_20260823.png"')
+  })
+
   it('removes the pending image if the upload rejects', async () => {
     const editor = makeEditor()
     const deps = makeDeps()
