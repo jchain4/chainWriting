@@ -112,7 +112,11 @@ function useBubblePos(editor: TiptapEditor | null, toolbarRef: RefObject<HTMLDiv
   useEffect(() => {
     if (!editor) return
     const update = () => {
-      if (editor.state.selection.empty) { setCoords(null); return }
+      const selection = editor.state.selection
+      // A NodeSelection (e.g. clicking a horizontal rule or a standalone
+      // image) is non-empty but isn't text to format — the bubble menu's
+      // bold/italic/etc. buttons don't apply to it, so skip those.
+      if (selection.empty || !(selection instanceof TextSelection)) { setCoords(null); return }
       const sel = window.getSelection()
       if (!sel || sel.rangeCount === 0) { setCoords(null); return }
       const rect = sel.getRangeAt(0).getBoundingClientRect()

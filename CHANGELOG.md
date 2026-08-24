@@ -28,6 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Toolbar/popover text contrast (`--cw-bubble-text`) raised to meet WCAG AA (4.5:1) against the default background.
 - `htmlToMarkdown` no longer drops link URLs — `<a href>` now converts to `[text](href)` instead of losing the link entirely.
 - `htmlToMarkdown` now numbers ordered lists (`1.`/`2.`/`3.`) instead of flattening them to unordered bullets.
+- The bubble menu no longer appears when a non-text node (e.g. a horizontal rule) is selected — its formatting buttons don't apply to it.
 
 ### Documentation
 - Noted that chain-writing does not sanitize HTML anywhere (`getHTML()`/`getJSON()`/`setContent()` are raw passthroughs) — sanitizing untrusted content before `setContent()` is the host's responsibility.

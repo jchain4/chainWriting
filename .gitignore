@@ -20,6 +20,9 @@ dist-ssr
 .env.local
 .env.*.local
 
+# Playwright MCP artifacts (browser snapshots/logs from interactive verification)
+.playwright-mcp/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
