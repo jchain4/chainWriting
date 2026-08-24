@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-24
+
 ### Added
 - Rich content: images (by URL or file upload via a new `onImageUpload` prop) and tables, inserted via a `/` slash-command menu.
 - Contextual table toolbar (add/remove row or column, delete table) shown whenever the cursor is inside a table.
