@@ -157,6 +157,9 @@ These all operate on plain HTML strings — the same string `onChange`/`getHTML(
 | `countWords(html)` | Word count. Kept for backward compatibility — `getDocumentStats` is the richer superset below |
 | `getDocumentStats(html, options?)` | `{ words, characters, charactersNoSpaces, readingTimeMinutes, links, images, tables }`. `options.wordsPerMinute` defaults to `200` |
 | `getHeadingOutline(html)` | `{ level, text, id? }[]` for every h1-h6, in document order — useful for a table of contents. `id` is only set if already present in the HTML; no slugs are generated |
+| `getTitle(html, options?)` | First heading's text, or the first paragraph truncated to `options.maxLength` (default `50`). `undefined` if neither is found — no locale-specific fallback string |
+| `getExcerpt(html, options?)` | Plain-text excerpt collapsed to one line, truncated at a word boundary to `options.maxLength` (default `200`). Always a string (`''` for an empty document) |
+| `getFirstImage(html)` | `src` of the first `<img>` in the document — a cover-image candidate — or `undefined` |
 | `downloadMarkdown(title, html)` | Browser-only: triggers a `.md` file download. Call it from an event handler, not during SSR render |
 
 ```tsx
@@ -168,6 +171,24 @@ const stats = getDocumentStats(html)
 const outline = getHeadingOutline(html)
 // [{ level: 1, text: 'Introduction' }, { level: 2, text: 'Details' }, ...]
 ```
+
+## Preparing content for publishing
+
+`getHTML()` is already portable, publish-ready HTML: no `cw-*` classes or wrapper markup ever land inside the document content (those only exist on toolbar/menu/popover UI elements, never on ProseMirror nodes), and images inserted via `onImageUpload` carry the real uploaded URL rather than an embedded blob/base64 string. That means the raw output of `getHTML()` can go straight into a blogging platform's API (WordPress, Ghost, Medium, …) without any cleanup step.
+
+`getTitle`, `getExcerpt`, and `getFirstImage` (above) fill in the metadata those APIs typically ask for alongside the body: a title, an excerpt/subtitle, and a featured/cover image.
+
+```tsx
+const html = editorRef.current!.getHTML()
+const post = {
+  title: getTitle(html) ?? 'Untitled',
+  excerpt: getExcerpt(html),
+  coverImage: getFirstImage(html),
+  html,
+}
+```
+
+chain-writing's job stops at producing this clean content — authenticating with a platform and calling its API is the host application's responsibility, not this library's.
 
 ## Highlighting text ranges (e.g. AI style-check flags)
 

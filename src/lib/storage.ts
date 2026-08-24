@@ -1,4 +1,5 @@
 import { get, set, del, keys } from 'idb-keyval'
+import { getTitle } from './exportMarkdown'
 
 export interface Doc {
   id: string
@@ -17,17 +18,7 @@ export function newId(): string {
 }
 
 export function extractTitle(html: string): string {
-  const heading = html.match(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/i)
-  if (heading) {
-    const text = heading[1].replace(/<[^>]*>/g, '').trim()
-    if (text) return text
-  }
-  const para = html.match(/<p[^>]*>(.*?)<\/p>/i)
-  if (para) {
-    const text = para[1].replace(/<[^>]*>/g, '').trim()
-    if (text) return text.slice(0, 50) + (text.length > 50 ? '…' : '')
-  }
-  return 'Sin título'
+  return getTitle(html) ?? 'Sin título'
 }
 
 export async function saveDoc(doc: Doc): Promise<void> {

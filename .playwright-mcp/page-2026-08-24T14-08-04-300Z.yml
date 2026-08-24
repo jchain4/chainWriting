@@ -1,0 +1,29 @@
+- generic [ref=e3]:
+  - generic: Guardado
+  - complementary [ref=e20]:
+    - generic [ref=e21]:
+      - generic [ref=e22]: Documentos
+      - button "+" [ref=e23] [cursor=pointer]
+    - list [ref=e24]:
+      - listitem [ref=e25] [cursor=pointer]:
+        - generic [ref=e26]: Mi Artículo de Prueba
+        - generic [ref=e27]:
+          - generic [ref=e28]: 16:07
+          - button "Eliminar" [ref=e29]: ×
+      - listitem [ref=e30] [cursor=pointer]:
+        - generic [ref=e31]: Sin título
+        - generic [ref=e32]:
+          - generic [ref=e33]: 16:51
+          - button "Eliminar" [ref=e34]: ×
+  - main [ref=e5]:
+    - textbox "Empieza a escribir…" [ref=e9]:
+      - list [ref=e35]:
+        - listitem [ref=e36]:
+          - paragraph [ref=e37]: Mi Artículo de Prueba
+      - paragraph [ref=e38]
+  - contentinfo [ref=e14]:
+    - generic [ref=e15]: 4 palabras · 1 min
+    - generic [ref=e16]:
+      - button "¶" [ref=e17] [cursor=pointer]
+      - button "⊡" [ref=e18] [cursor=pointer]
+      - button ".md" [ref=e19] [cursor=pointer]

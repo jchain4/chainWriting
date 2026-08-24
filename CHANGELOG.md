@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `onSelectionUpdate`, `onFocus`, `onBlur` props for reacting to editor lifecycle events from the host app.
 - `createHighlightPlugin`/`setHighlightRanges` — a ProseMirror decoration plugin for highlighting arbitrary text ranges (e.g. AI style-check flags) as a pure visual overlay, registered post-mount via `getEditor()`. New `--cw-highlight-decoration` theming token.
 - Bulleted and numbered lists added to the `/` command menu.
+- `getTitle()`, `getExcerpt()`, `getFirstImage()` — article-metadata extraction (title, subtitle/excerpt, cover-image candidate) for handing content off to a publishing target.
 
 ### Fixed
 - Tab could not move focus out of the editor outside of a list (a real WCAG 2.1.2 keyboard trap) — Tab now either enters a visible floating toolbar or leaves the editor normally.

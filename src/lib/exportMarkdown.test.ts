@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { getDocumentStats, getHeadingOutline, getText, htmlToMarkdown } from './exportMarkdown'
+import {
+  getDocumentStats,
+  getExcerpt,
+  getFirstImage,
+  getHeadingOutline,
+  getText,
+  getTitle,
+  htmlToMarkdown,
+} from './exportMarkdown'
 
 describe('htmlToMarkdown — images', () => {
   it('converts an image with alt text', () => {
@@ -131,5 +139,63 @@ describe('getHeadingOutline', () => {
       { level: 5, text: 'Five' },
       { level: 6, text: 'Six' },
     ])
+  })
+})
+
+describe('getTitle', () => {
+  it('prefers the first heading over a paragraph', () => {
+    expect(getTitle('<h2>The Title</h2><p>Some intro text.</p>')).toBe('The Title')
+  })
+
+  it('falls back to the first paragraph when there is no heading', () => {
+    expect(getTitle('<p>An article without a heading.</p>')).toBe('An article without a heading.')
+  })
+
+  it('truncates a long paragraph title at maxLength', () => {
+    const html = `<p>${Array(20).fill('word').join(' ')}</p>`
+    const title = getTitle(html, { maxLength: 10 })
+    expect(title!.length).toBeLessThanOrEqual(11)
+    expect(title!.endsWith('…')).toBe(true)
+  })
+
+  it('returns undefined for a document with no heading or paragraph text', () => {
+    expect(getTitle('<p></p>')).toBeUndefined()
+    expect(getTitle('')).toBeUndefined()
+  })
+})
+
+describe('getExcerpt', () => {
+  it('collapses multiple paragraphs into a single line', () => {
+    expect(getExcerpt('<p>Uno</p><p>Dos</p>')).toBe('Uno Dos')
+  })
+
+  it('truncates at a word boundary and appends an ellipsis', () => {
+    const html = `<p>${Array(50).fill('word').join(' ')}</p>`
+    const excerpt = getExcerpt(html, { maxLength: 20 })
+    expect(excerpt.length).toBeLessThanOrEqual(21)
+    expect(excerpt.endsWith('…')).toBe(true)
+    expect(excerpt.endsWith(' …')).toBe(false)
+  })
+
+  it('returns an empty string for an empty document', () => {
+    expect(getExcerpt('<p></p>')).toBe('')
+  })
+
+  it('does not truncate text within maxLength', () => {
+    expect(getExcerpt('<p>Short text.</p>', { maxLength: 200 })).toBe('Short text.')
+  })
+})
+
+describe('getFirstImage', () => {
+  it('returns the src of a single image', () => {
+    expect(getFirstImage('<p>text</p><img src="https://x/a.png">')).toBe('https://x/a.png')
+  })
+
+  it('returns only the first image when there are several', () => {
+    expect(getFirstImage('<img src="a.png"><img src="b.png">')).toBe('a.png')
+  })
+
+  it('returns undefined when there are no images', () => {
+    expect(getFirstImage('<p>no images here</p>')).toBeUndefined()
   })
 })

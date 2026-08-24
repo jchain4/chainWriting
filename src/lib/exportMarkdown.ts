@@ -160,6 +160,51 @@ export function getHeadingOutline(html: string): HeadingOutlineItem[] {
   return items
 }
 
+/**
+ * Extracts a short title candidate: the first heading's text, or failing
+ * that the first non-empty paragraph truncated to `maxLength`. Returns
+ * `undefined` when neither is found — unlike a UI layer, this has no
+ * locale-specific fallback string to fall back to; that's the host's call.
+ */
+export function getTitle(html: string, options?: { maxLength?: number }): string | undefined {
+  const maxLength = options?.maxLength ?? 50
+
+  const heading = /<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/i.exec(html)
+  if (heading) {
+    const text = decodeEntities(stripTags(heading[1])).trim()
+    if (text) return text
+  }
+
+  const para = /<p[^>]*>([\s\S]*?)<\/p>/i.exec(html)
+  if (para) {
+    const text = decodeEntities(stripTags(para[1])).trim()
+    if (text) return text.length > maxLength ? text.slice(0, maxLength).trim() + '…' : text
+  }
+
+  return undefined
+}
+
+/**
+ * Plain-text excerpt (e.g. an article subtitle/meta description) collapsed
+ * to a single line and truncated at a word boundary. Always returns a
+ * string — an empty document yields `''`, unlike `getTitle`.
+ */
+export function getExcerpt(html: string, options?: { maxLength?: number }): string {
+  const maxLength = options?.maxLength ?? 200
+  const text = getText(html).replace(/\s+/g, ' ').trim()
+  if (text.length <= maxLength) return text
+  const truncated = text.slice(0, maxLength)
+  const lastSpace = truncated.lastIndexOf(' ')
+  return (lastSpace > 0 ? truncated.slice(0, lastSpace) : truncated).trim() + '…'
+}
+
+/** Returns the `src` of the first `<img>` in the document (a cover-image candidate), or `undefined`. */
+export function getFirstImage(html: string): string | undefined {
+  const match = /<img\b([^>]*)>/i.exec(html)
+  if (!match) return undefined
+  return /\bsrc="([^"]*)"/i.exec(match[1])?.[1] ?? undefined
+}
+
 export function downloadMarkdown(title: string, html: string): void {
   const md = htmlToMarkdown(html)
   const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })

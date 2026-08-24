@@ -17,6 +17,9 @@ export type { EditorProps, EditorHandle } from './components/Editor'
 export {
   htmlToMarkdown,
   getText,
+  getTitle,
+  getExcerpt,
+  getFirstImage,
   countWords,
   getDocumentStats,
   getHeadingOutline,
