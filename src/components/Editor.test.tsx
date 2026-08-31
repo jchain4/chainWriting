@@ -242,13 +242,18 @@ describe('Editor', () => {
       await waitFor(() => expect(container.querySelector('.cw-table-menu')).toBeInTheDocument())
 
       editor.view.dom.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }))
-      const buttons = container.querySelectorAll('.cw-table-menu button')
-      await waitFor(() => expect(document.activeElement).toBe(buttons[0]))
+      // Re-queried fresh on every assertion/retry rather than snapshotted
+      // once: TableToolbar recomputes its position (and can briefly unmount
+      // via coords becoming null) on every editor 'transaction' event, not
+      // just 'selectionUpdate' — a stale NodeList could otherwise hold
+      // references to buttons from a since-replaced toolbar instance.
+      const queryButtons = () => container.querySelectorAll('.cw-table-menu button')
+      await waitFor(() => expect(document.activeElement).toBe(queryButtons()[0]))
 
       fireEvent.keyDown(document.activeElement!, { key: 'ArrowRight' })
-      expect(document.activeElement).toBe(buttons[1])
-      expect(buttons[1].getAttribute('tabindex')).toBe('0')
-      expect(buttons[0].getAttribute('tabindex')).toBe('-1')
+      await waitFor(() => expect(document.activeElement).toBe(queryButtons()[1]))
+      expect(queryButtons()[1].getAttribute('tabindex')).toBe('0')
+      expect(queryButtons()[0].getAttribute('tabindex')).toBe('-1')
     })
 
     it('aria-pressed on the bold button reflects the active formatting state', async () => {
