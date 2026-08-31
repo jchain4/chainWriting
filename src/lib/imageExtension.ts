@@ -57,7 +57,12 @@ export const UploadableImage = TiptapImage.extend({
           })
           if (pos === null) return false
           if (dispatch) {
+            // Not a user edit — an undo landing right after the swap resolves
+            // must not revert the node back to its local-preview/data: src and
+            // re-arm its uploadId, which would look exactly like the upload
+            // never happened (and re-persist that broken state on next save).
             tr.setNodeAttribute(pos, 'src', src).setNodeAttribute(pos, 'uploadId', null)
+            tr.setMeta('addToHistory', false)
           }
           return true
         },
@@ -77,7 +82,12 @@ export const UploadableImage = TiptapImage.extend({
             return true
           })
           if (pos === null) return false
-          if (dispatch) tr.delete(pos, pos + size)
+          if (dispatch) {
+            // Same reasoning as resolveImageUpload: an automatic removal
+            // triggered by a failed upload isn't a user edit either.
+            tr.delete(pos, pos + size)
+            tr.setMeta('addToHistory', false)
+          }
           return true
         },
     }

@@ -57,6 +57,33 @@ describe('UploadableImage commands', () => {
     expect(editor.commands.resolveImageUpload('missing', 'https://cdn/a.png')).toBe(false)
     expect(editor.commands.rejectImageUpload('missing')).toBe(false)
   })
+
+  it('resolveImageUpload does not add its own undo step, so undo right after a resolve undoes the whole paste instead of reverting only the swap', () => {
+    const editor = makeEditor()
+    editor.commands.insertPendingImage({ src: 'blob:preview', alt: 'a.png', uploadId: 'up-1' })
+    editor.commands.resolveImageUpload('up-1', 'https://cdn/a.png')
+
+    editor.commands.undo()
+
+    // insertPendingImage is the only real history entry, so undo removes the
+    // image entirely — the correct behavior for "undo my paste". Before this
+    // fix, resolveImageUpload's swap was itself a separate undo step, so undo
+    // reverted *only* the swap and left the node behind with its stale
+    // preview src and uploadId re-armed: a broken, half-uploaded image with
+    // no upload in flight to ever resolve it again.
+    expect(editor.getHTML()).not.toContain('<img')
+    expect(editor.getHTML()).not.toContain('data-upload-id')
+    expect(editor.getHTML()).not.toContain('blob:preview')
+  })
+
+  it('rejectImageUpload does not add its own undo step', () => {
+    const editor = makeEditor()
+    editor.commands.insertPendingImage({ src: 'blob:preview', alt: 'a.png', uploadId: 'up-1' })
+    editor.commands.rejectImageUpload('up-1')
+
+    // Should not throw when rebasing undo over the untracked removal.
+    expect(() => editor.commands.undo()).not.toThrow()
+  })
 })
 
 describe('insertImageWithUpload', () => {

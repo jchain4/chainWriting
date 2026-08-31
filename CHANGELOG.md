@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-08-31
+
+### Fixed
+- `resolveImageUpload`/`rejectImageUpload` no longer register their own undo step. Previously, undoing right after an upload resolved reverted *only* the src swap, leaving the image node behind with its stale preview `src` and `uploadId` re-armed — a broken, half-uploaded image with no upload in flight to ever resolve it again. Undo right after a paste/drop now correctly undoes the whole insertion instead.
+
 ## [0.3.0] - 2026-08-24
 
 ### Added
