@@ -38,3 +38,7 @@ export {
 export type {
   Suggestion, ReplaceSuggestion, InsertAfterSuggestion, ResolvedSuggestion, SuggestionStatus, SuggestionsOptions,
 } from './lib/suggestions'
+export { createEditorTools } from './lib/agentTools'
+export type {
+  EditorTool, EditorToolName, EditorToolResult, EditorTools, EditorToolsOptions, EditorToolsSource, JsonSchemaObject,
+} from './lib/agentTools'

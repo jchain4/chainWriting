@@ -16,6 +16,10 @@ Embeddable rich-text editor component for long-form writing. Built with Tiptap v
 - **Typewriter mode** — cursor stays vertically centered while typing
 - **Rich content** — images (by URL or file upload) and tables, inserted via a `/` slash-command menu
 - **Stateless** — Editor holds no storage; the host app receives HTML via `onChange`
+- **Analyzable** — every block has a stable id; `getBlocks()` and `onBlocksChange` tell the host exactly what changed, for incremental analysis
+- **Annotations** — mark text by content ("this phrase in this block"), in independent layers, with click/hover events; marks follow their text while the user edits
+- **Suggestions** — propose changes shown track-changes style, which the user accepts or rejects
+- **LLM-ready, LLM-agnostic** — `createEditorTools()` gives your own model MCP-shaped tools to read, annotate and propose edits; the editor itself never calls any model or service
 - **Themeable** — all visual tokens as CSS variables on `.cw-editor`; typography inherited from host via `font: inherit`
 
 ## Install
@@ -290,6 +294,41 @@ editorRef.current!.addSuggestions([
 - **Styling**: `.cw-suggestion-delete` (a `<del>`), `.cw-suggestion-insert` (an `<ins>`), `.cw-suggestion-block`, `.cw-suggestion-controls`, and the tokens `--cw-suggestion-delete-color`, `--cw-suggestion-delete-bg`, `--cw-suggestion-insert-color`, `--cw-suggestion-insert-bg`.
 
 Outside React, the same operations are exported as `addSuggestions(editor, list)`, `acceptSuggestion(editor, id)`, `rejectSuggestion(editor, id)`, `removeSuggestions(editor, ids?)` and `getSuggestions(editor)`, plus the `Suggestions` extension.
+
+## Connecting an LLM: tools for the model
+
+chain-writing never talks to any model or service — but it ships the "instruction manual" an LLM needs to work with the document. `createEditorTools()` returns tool definitions in the shape of [MCP](https://modelcontextprotocol.io) tools (`name`, `title`, `description`, `inputSchema`, `annotations`) plus an `execute` function that runs the calls the model makes and returns MCP-shaped results (`content`, `structuredContent`, `isError`). Which model to use, where it runs, and whether to offer it at all is entirely the host app's decision.
+
+| Tool | What the model can do | Changes the text? |
+|------|-----------------------|-------------------|
+| `read_document` | Read the document, one `[blockId] type: "text"` line per block (optionally only some blocks) | No |
+| `get_selection` | Read what the user has selected, or where the cursor is | No |
+| `annotate` | Highlight phrases (or whole blocks) with a note for the user | No |
+| `remove_annotations` | Remove its own annotations | No |
+| `suggest_edits` | Propose replacing or deleting phrases | Only if the user accepts |
+| `suggest_insert` | Propose new paragraphs after a block | Only if the user accepts |
+| `withdraw_suggestions` | Withdraw its own pending suggestions | No |
+
+There is deliberately no tool to edit the document directly: the model only ever *proposes*, and the user decides. A suggestion whose text the user changed meanwhile can't be accepted (see "Suggestions"), so the model never overwrites text it didn't read.
+
+```ts
+import { createEditorTools } from 'chain-writing'
+
+const { tools, execute } = createEditorTools(() => editorRef.current, {
+  include: ['read_document', 'get_selection', 'suggest_edits'], // optional subset
+})
+
+// 1. Send `tools` to your LLM, in its API's format — e.g. through your own backend:
+//    Anthropic Messages API: tools.map(({ name, description, inputSchema }) => ({ name, description, input_schema: inputSchema }))
+//    OpenAI-style function calling: tools.map(({ name, description, inputSchema }) => ({ type: 'function', function: { name, description, parameters: inputSchema } }))
+// 2. For each tool call the model makes, run it and send the result back:
+const result = execute(call.name, call.input)
+```
+
+- `execute` never throws: unknown tools, malformed input and an unmounted editor all come back as `isError` results whose text tells the model what to fix. When a quote isn't found, the result says so (`not_found`) and tells the model to re-read the document.
+- Everything the tools create is tagged as the model's: annotations go to their own layer (`annotationLayer`, default `"assistant"`), ids get a prefix (`idPrefix`, default `"assistant-"`), and `data.source` is `"assistant"`. `remove_annotations` and `withdraw_suggestions` only ever touch the model's own items, never the host's.
+- `read_document` reports the document `version` (see "Blocks"), so the host can tell whether the user kept typing while the model was thinking.
+- **MCP**: since the definitions and results already follow MCP's shapes, exposing them through an MCP server (e.g. in your own backend, relaying calls to the open editor) — or a browser-side protocol such as WebMCP — is a matter of forwarding `tools` and `execute`. chain-writing itself never opens a server or a connection.
 
 ## Highlighting text ranges (e.g. AI style-check flags)
 

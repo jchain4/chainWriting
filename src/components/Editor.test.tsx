@@ -6,6 +6,7 @@ import { PluginKey } from '@tiptap/pm/state'
 import { Editor, type EditorHandle } from './Editor'
 import { createHighlightPlugin, setHighlightRanges } from '../lib/highlightPlugin'
 import { BlockId } from '../lib/blockId'
+import { createEditorTools } from '../lib/agentTools'
 
 function mockSelectionRect() {
   // jsdom implements neither Range.prototype.getBoundingClientRect nor
@@ -168,6 +169,22 @@ describe('Editor', () => {
     ref.current!.addSuggestions([{ type: 'replace', id: 'r', blockId: 'a', quote: 'quick', replacement: 'slow' }])
     expect(container.querySelector('ins.cw-suggestion-insert')).toBeInTheDocument()
     expect(container.querySelector('.cw-suggestion-controls')).toBeNull()
+  })
+
+  it('works with createEditorTools through the ref handle: read, annotate and suggest on the live component', async () => {
+    const { ref, container } = await renderReadyEditor({ initialContent: '<p data-block-id="a">The quick fox</p>' })
+    await waitFor(() => expect(ref.current!.getBlocks()).toHaveLength(1))
+    const { execute } = createEditorTools(() => ref.current)
+
+    expect(execute('read_document', {}).content[0].text).toContain('[a] paragraph: "The quick fox"')
+    execute('annotate', { annotations: [{ blockId: 'a', quote: 'fox', note: 'Animal' }] })
+    execute('suggest_edits', { edits: [{ blockId: 'a', quote: 'quick', replacement: 'slow' }] })
+    expect(container.querySelector('.cw-annotation')).toHaveTextContent('fox')
+    expect(container.querySelector('ins.cw-suggestion-insert')).toHaveTextContent('slow')
+    expect(ref.current!.getAnnotations('assistant')).toHaveLength(1)
+
+    expect(ref.current!.acceptSuggestion('assistant-s1')).toBe(true)
+    expect(ref.current!.getBlocks()[0].text).toBe('The slow fox')
   })
 
   it('renders the .cw-editor root without throwing', async () => {
