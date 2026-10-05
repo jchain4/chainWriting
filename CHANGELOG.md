@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-05
+
 ### Added
 - Stable block ids: every paragraph, heading, code block, image and horizontal rule gets an id that survives edits elsewhere, undo/redo, and HTML/JSON round-trips (rendered as `data-block-id`). Enter keeps the id with the text (including Enter at the very start of a block, which opens an empty line above); pasted copies get fresh ids; changing a block's type keeps its id. Assigned on mount without triggering `onChange` or adding an undo step.
 - `getBlocks()` on `EditorHandle` — the document as a list of `{ id, type, text, attrs, ancestors }` blocks in reading order.
@@ -22,6 +24,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `onSuggestionAccept`, `onSuggestionReject`, `onSuggestionStatusChange` props.
 - `--cw-suggestion-delete-color`, `--cw-suggestion-delete-bg`, `--cw-suggestion-insert-color`, `--cw-suggestion-insert-bg` theming tokens.
 - `Suggestions` extension and standalone `addSuggestions`/`acceptSuggestion`/`rejectSuggestion`/`removeSuggestions`/`getSuggestions` exports for use with the raw Tiptap editor.
+- `createEditorTools()` — LLM tool definitions in MCP shape (`name`, `title`, `description`, `inputSchema`, `annotations`) plus an `execute` function returning MCP-shaped results, for the host to wire to *its own* model: `read_document`, `get_selection`, `annotate`, `remove_annotations`, `suggest_edits`, `suggest_insert`, `withdraw_suggestions`. No tool edits the document directly — the model only proposes. chain-writing never calls any model or service.
+- `execute` never throws: invalid input, unknown tools and an unavailable editor come back as `isError` results with a message the model can act on. The tools' annotations and suggestions are kept in their own layer/id namespace and never touch the host's.
 
 ### Changed
 - `getHTML()`/`onChange` output now includes a `data-block-id` attribute on block elements, and `getJSON()` a `blockId` attribute.
