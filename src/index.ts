@@ -28,3 +28,5 @@ export {
 export type { DocumentStats, HeadingOutlineItem } from './lib/exportMarkdown'
 export { createHighlightPlugin, setHighlightRanges } from './lib/highlightPlugin'
 export type { HighlightRange } from './lib/highlightPlugin'
+export { BlockId, getBlocks, diffBlocks, DEFAULT_BLOCK_TYPES } from './lib/blockId'
+export type { Block, BlocksChange, BlockIdOptions } from './lib/blockId'

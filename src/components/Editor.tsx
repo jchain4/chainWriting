@@ -13,6 +13,7 @@ import TableHeader from '@tiptap/extension-table-header'
 import { TextSelection } from '@tiptap/pm/state'
 import type { AnyExtension, Content, Editor as TiptapEditor, JSONContent } from '@tiptap/react'
 import { mergeExtensions } from '../lib/extensions'
+import { BlockId, getBlocks, type Block, type BlockIdOptions, type BlocksChange } from '../lib/blockId'
 import { UploadableImage } from '../lib/imageExtension'
 import { insertImageWithUpload } from '../lib/imageUpload'
 import { SlashCommand, type SlashCommandItem, type SlashCommandState, type SlashKeyHandler } from '../lib/slashCommandExtension'
@@ -64,6 +65,13 @@ export interface EditorProps {
    */
   onImageUpload?: (file: File) => Promise<string>
   /**
+   * Called after each edit with the ids of the blocks (paragraphs, headings,
+   * images…) that were added, changed or removed — so the host can re-analyze
+   * just those blocks instead of the whole document. Not called for edits
+   * that leave every block's content untouched.
+   */
+  onBlocksChange?: (change: BlocksChange) => void
+  /**
    * Accessible name for the editing surface, exposed via aria-label on the
    * contenteditable element (role="textbox"). Falls back to `placeholder`
    * when omitted, so there is always a non-empty accessible name. Like
@@ -92,6 +100,11 @@ export interface EditorHandle {
   isReady: () => boolean
   /** Escape hatch: the raw Tiptap editor instance. `null` until mounted. */
   getEditor: () => TiptapEditor | null
+  /**
+   * The document as a list of blocks in reading order, each with a stable id
+   * (also rendered as `data-block-id` in getHTML()). Empty until mounted.
+   */
+  getBlocks: () => Block[]
 }
 
 interface LinkPopoverState {
@@ -658,6 +671,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   onFocus,
   onBlur,
   onImageUpload,
+  onBlocksChange,
   ariaLabel,
 }, ref) {
   const accessibleName = ariaLabel || placeholder
@@ -671,6 +685,10 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   const slashMenuHandleRef = useRef<SlashKeyHandler>(null)
   const bubbleToolbarRef = useRef<RovingToolbarHandle>(null)
   const tableToolbarRef = useRef<RovingToolbarHandle>(null)
+  // BlockId is configured once at construction; read the latest callback
+  // through a ref so a re-rendered host doesn't need to rebuild the editor.
+  const onBlocksChangeRef = useRef(onBlocksChange)
+  onBlocksChangeRef.current = onBlocksChange
   const instanceId = useId()
   const slashListboxId = `cw-slash-${instanceId}`
 
@@ -792,6 +810,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
         TableCell,
         TableHeader,
         slashExtension,
+        BlockId.configure({ onBlocksChange: (change) => onBlocksChangeRef.current?.(change) }),
       ],
       extensions,
     ),
@@ -988,6 +1007,12 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     clear: () => editor?.commands.clearContent(true) ?? false,
     isReady: () => !!editor,
     getEditor: () => editor,
+    getBlocks: () => {
+      if (!editor) return []
+      // Honor a host-reconfigured BlockId (custom `types`) passed via `extensions`.
+      const blockId = editor.extensionManager.extensions.find((e) => e.name === 'blockId')
+      return getBlocks(editor.state.doc, (blockId?.options as BlockIdOptions | undefined)?.types)
+    },
   }), [editor])
 
   return (

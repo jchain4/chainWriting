@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Stable block ids: every paragraph, heading, code block, image and horizontal rule gets an id that survives edits elsewhere, undo/redo, and HTML/JSON round-trips (rendered as `data-block-id`). Enter keeps the id with the text (including Enter at the very start of a block, which opens an empty line above); pasted copies get fresh ids; changing a block's type keeps its id. Assigned on mount without triggering `onChange` or adding an undo step.
+- `getBlocks()` on `EditorHandle` — the document as a list of `{ id, type, text, attrs, ancestors }` blocks in reading order.
+- `onBlocksChange` prop — after each edit, reports the ids of added, updated and removed blocks plus a `version` counter, so hosts can re-analyze only what changed and discard stale async results.
+- `BlockId` extension and standalone `getBlocks(doc)`/`diffBlocks(oldDoc, newDoc)` helpers exported for advanced configuration.
+
+### Changed
+- `getHTML()`/`onChange` output now includes a `data-block-id` attribute on block elements, and `getJSON()` a `blockId` attribute.
+
 ## [0.3.1] - 2026-08-31
 
 ### Fixed

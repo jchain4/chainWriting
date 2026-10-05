@@ -69,6 +69,7 @@ function App() {
 | `onFocus` | `(editor: Editor, event: FocusEvent) => void` | — | Called when the editor gains focus |
 | `onBlur` | `(editor: Editor, event: FocusEvent) => void` | — | Called when the editor loses focus |
 | `onImageUpload` | `(file: File) => Promise<string>` | — | Enables file-based image insertion — see "Rich content" |
+| `onBlocksChange` | `(change: BlocksChange) => void` | — | Called after each edit with the ids of added/changed/removed blocks — see "Blocks" |
 | `ariaLabel` | `string` | falls back to `placeholder` | Accessible name for the editing surface — see "Accessibility" |
 | `ref` | `Ref<EditorHandle>` | — | Imperative handle — see "Imperative API" |
 
@@ -102,6 +103,7 @@ function App() {
 | `clear()` | Clear the whole document |
 | `isReady()` | Whether the underlying Tiptap editor has mounted |
 | `getEditor()` | Escape hatch — the raw Tiptap `Editor` instance, `null` until mounted |
+| `getBlocks()` | The document as a list of blocks with stable ids — see "Blocks" |
 
 There is no reactive `content` prop: Tiptap never re-parses content on prop changes, so pushing new content into a live editor always goes through `ref.current.setContent(...)`. The `editable` prop is the one exception to this construction-only rule — it's designed to be toggled live (e.g. a read-only "review" mode), so it's synced reactively on every render rather than only read once.
 
@@ -189,6 +191,35 @@ const post = {
 ```
 
 chain-writing's job stops at producing this clean content — authenticating with a platform and calling its API is the host application's responsibility, not this library's.
+
+## Blocks: stable ids and change tracking
+
+Every block of the document — paragraphs, headings, code blocks, images, horizontal rules — carries a stable id. It survives edits anywhere else in the document, undo/redo, and saving/reloading (it's rendered as `data-block-id` in `getHTML()` and kept in `getJSON()`, so persisting either one keeps ids stable across sessions). This gives the host app — or an LLM it chooses to wire in — a reliable way to say "this paragraph" that doesn't break as the user keeps typing. The editor itself never calls any external service.
+
+```tsx
+<Editor
+  ref={editorRef}
+  onBlocksChange={({ added, updated, removed, version }) => {
+    // Re-analyze only what changed, e.g. send just these blocks to your own backend.
+    const changed = new Set([...added, ...updated])
+    const blocks = editorRef.current!.getBlocks().filter((b) => changed.has(b.id))
+  }}
+/>
+```
+
+`getBlocks()` returns blocks in reading order:
+
+```ts
+{ id: 'k3f9a1x2', type: 'heading', text: 'Title', attrs: { level: 2 }, ancestors: [] }
+{ id: 'p0d81mzq', type: 'paragraph', text: 'An item', attrs: {}, ancestors: ['bulletList', 'listItem'] }
+```
+
+- **`updated`** means the block's own text, formatting or attributes changed — moving a block or wrapping it in a list doesn't count.
+- **Enter** keeps the id with the text: splitting in the middle or at the end leaves it on the first half, while Enter at the very start (opening a line above) leaves it on the text, not the new empty line. A **pasted copy** of an existing block gets a fresh id; changing a block's type (paragraph → heading, code block…) or wrapping it in a list keeps it.
+- **`version`** increases on every document change. If you send blocks off for slow (async) analysis, compare versions when the result comes back to tell whether the document has moved on meanwhile.
+- Ids are assigned right after mount without counting as an edit: no `onChange`/`onBlocksChange` call and no undo step. Content loaded without ids (or via `setContent`) gets fresh random ones.
+
+The tracked node types and the id generator are configurable by passing your own `BlockId.configure({ types, generateId, onBlocksChange })` via the `extensions` prop (it replaces the built-in one, so wire `onBlocksChange` there instead of on the prop). `getBlocks(doc)` and `diffBlocks(oldDoc, newDoc)` are also exported as standalone functions over a ProseMirror document.
 
 ## Highlighting text ranges (e.g. AI style-check flags)
 

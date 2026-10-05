@@ -5,6 +5,7 @@ import { Extension } from '@tiptap/react'
 import { PluginKey } from '@tiptap/pm/state'
 import { Editor, type EditorHandle } from './Editor'
 import { createHighlightPlugin, setHighlightRanges } from '../lib/highlightPlugin'
+import { BlockId } from '../lib/blockId'
 
 function mockSelectionRect() {
   // jsdom implements neither Range.prototype.getBoundingClientRect nor
@@ -33,6 +34,50 @@ async function renderReadyEditor(props: Partial<React.ComponentProps<typeof Edit
 }
 
 describe('Editor', () => {
+  it('exposes stable block ids via getBlocks() and reports edited blocks via onBlocksChange', async () => {
+    const onBlocksChange = vi.fn()
+    const { ref } = await renderReadyEditor({ initialContent: '<p data-block-id="a">One</p><p>Two</p>', onBlocksChange })
+    await waitFor(() => expect(ref.current!.getBlocks()).toHaveLength(2))
+    const [first, second] = ref.current!.getBlocks()
+    expect(first).toMatchObject({ id: 'a', type: 'paragraph', text: 'One' })
+    expect(second.id).toBeTruthy()
+
+    ref.current!.getEditor()!.commands.insertContentAt(4, '!')
+    expect(onBlocksChange).toHaveBeenLastCalledWith(expect.objectContaining({ updated: ['a'], added: [], removed: [] }))
+    expect(ref.current!.getHTML()).toContain('data-block-id="a"')
+  })
+
+  it('always calls the latest onBlocksChange, even after a re-render with a new callback', async () => {
+    const first = vi.fn()
+    const second = vi.fn()
+    const ref = createRef<EditorHandle>()
+    const { rerender } = render(<Editor ref={ref} initialContent="<p data-block-id='a'>One</p>" onBlocksChange={first} />)
+    await waitFor(() => expect(ref.current?.getBlocks()).toHaveLength(1))
+
+    rerender(<Editor ref={ref} initialContent="<p data-block-id='a'>One</p>" onBlocksChange={second} />)
+    ref.current!.getEditor()!.commands.insertContentAt(4, '!')
+    expect(first).not.toHaveBeenCalled()
+    expect(second).toHaveBeenCalledWith(expect.objectContaining({ updated: ['a'] }))
+  })
+
+  it('reports content loaded through setContent as block changes', async () => {
+    const onBlocksChange = vi.fn()
+    const { ref } = await renderReadyEditor({ initialContent: '<p data-block-id="a">One</p>', onBlocksChange })
+    await waitFor(() => expect(ref.current!.getBlocks()).toHaveLength(1))
+    ref.current!.setContent('<p data-block-id="b">Two</p>')
+    expect(onBlocksChange).toHaveBeenLastCalledWith(expect.objectContaining({ added: ['b'], removed: ['a'] }))
+  })
+
+  it('getBlocks() honors a custom BlockId passed through the extensions prop', async () => {
+    const { ref } = await renderReadyEditor({
+      initialContent: '<h2>Title</h2><p>Body</p>',
+      extensions: [BlockId.configure({ types: ['heading'] })],
+    })
+    await waitFor(() => expect(ref.current!.getBlocks()).toHaveLength(1))
+    expect(ref.current!.getBlocks()[0]).toMatchObject({ type: 'heading', text: 'Title' })
+    expect(ref.current!.getHTML()).toContain('<p>Body</p>')
+  })
+
   it('renders the .cw-editor root without throwing', async () => {
     const { container } = await renderReadyEditor()
     expect(container.querySelector('.cw-editor')).toBeInTheDocument()
