@@ -78,6 +78,49 @@ describe('Editor', () => {
     expect(ref.current!.getHTML()).toContain('<p>Body</p>')
   })
 
+  it('sets, reads and clears annotations through the ref handle', async () => {
+    const { ref, container } = await renderReadyEditor({ initialContent: '<p data-block-id="a">The quick fox</p>' })
+    await waitFor(() => expect(ref.current!.getBlocks()).toHaveLength(1))
+
+    const [result] = ref.current!.setAnnotations('style', [{ id: 'x', blockId: 'a', quote: 'quick', kind: 'style' }])
+    expect(result).toMatchObject({ id: 'x', layer: 'style', status: 'active' })
+    expect(container.querySelector('.cw-annotation--style')).toHaveTextContent('quick')
+    expect(ref.current!.getAnnotations('style')).toHaveLength(1)
+    expect(ref.current!.getHTML()).not.toContain('cw-annotation')
+
+    ref.current!.clearAnnotations()
+    expect(ref.current!.getAnnotations()).toEqual([])
+    expect(container.querySelector('.cw-annotation')).toBeNull()
+  })
+
+  it('forwards annotation click, hover and status-change events to the latest props', async () => {
+    const onAnnotationClick = vi.fn()
+    const onAnnotationHover = vi.fn()
+    const onAnnotationStatusChange = vi.fn()
+    const ref = createRef<EditorHandle>()
+    const initial = '<p data-block-id="a">The quick fox</p>'
+    const { rerender, container } = render(<Editor ref={ref} initialContent={initial} />)
+    await waitFor(() => expect(ref.current?.getBlocks()).toHaveLength(1))
+    rerender(<Editor
+      ref={ref}
+      initialContent={initial}
+      onAnnotationClick={onAnnotationClick}
+      onAnnotationHover={onAnnotationHover}
+      onAnnotationStatusChange={onAnnotationStatusChange}
+    />)
+    const [a] = ref.current!.setAnnotations('test', [{ id: 'x', blockId: 'a', quote: 'quick' }])
+    const editor = ref.current!.getEditor()!
+
+    editor.view.someProp('handleClick', (h) => h(editor.view, a.from! + 1, new MouseEvent('click')))
+    expect(onAnnotationClick).toHaveBeenCalledWith([expect.objectContaining({ id: 'x' })], expect.any(MouseEvent))
+
+    fireEvent.mouseOver(container.querySelector('.cw-annotation')!)
+    expect(onAnnotationHover).toHaveBeenCalledWith([expect.objectContaining({ id: 'x' })], expect.any(MouseEvent))
+
+    editor.commands.deleteRange({ from: a.from!, to: a.to! })
+    expect(onAnnotationStatusChange).toHaveBeenCalledWith([expect.objectContaining({ id: 'x', status: 'stale' })])
+  })
+
   it('renders the .cw-editor root without throwing', async () => {
     const { container } = await renderReadyEditor()
     expect(container.querySelector('.cw-editor')).toBeInTheDocument()

@@ -14,6 +14,10 @@ import { TextSelection } from '@tiptap/pm/state'
 import type { AnyExtension, Content, Editor as TiptapEditor, JSONContent } from '@tiptap/react'
 import { mergeExtensions } from '../lib/extensions'
 import { BlockId, getBlocks, type Block, type BlockIdOptions, type BlocksChange } from '../lib/blockId'
+import {
+  Annotations, setAnnotations, clearAnnotations, getAnnotations,
+  type Annotation, type ResolvedAnnotation,
+} from '../lib/annotations'
 import { UploadableImage } from '../lib/imageExtension'
 import { insertImageWithUpload } from '../lib/imageUpload'
 import { SlashCommand, type SlashCommandItem, type SlashCommandState, type SlashKeyHandler } from '../lib/slashCommandExtension'
@@ -71,6 +75,15 @@ export interface EditorProps {
    * that leave every block's content untouched.
    */
   onBlocksChange?: (change: BlocksChange) => void
+  /** Click on annotated text — every active annotation under the click (they can overlap). See setAnnotations(). */
+  onAnnotationClick?: (annotations: ResolvedAnnotation[], event: MouseEvent) => void
+  /** Pointer entering/leaving annotated text. Called with [] when it leaves all annotations. */
+  onAnnotationHover?: (annotations: ResolvedAnnotation[], event: MouseEvent) => void
+  /**
+   * After an edit, the annotations that became `stale` (their text is gone,
+   * e.g. the user rewrote the flagged phrase) or `active` again (e.g. undo).
+   */
+  onAnnotationStatusChange?: (annotations: ResolvedAnnotation[]) => void
   /**
    * Accessible name for the editing surface, exposed via aria-label on the
    * contenteditable element (role="textbox"). Falls back to `placeholder`
@@ -105,6 +118,17 @@ export interface EditorHandle {
    * (also rendered as `data-block-id` in getHTML()). Empty until mounted.
    */
   getBlocks: () => Block[]
+  /**
+   * Marks text by content — `{ id, blockId, quote }` = "the phrase `quote`
+   * in block `blockId`" — replacing every annotation previously set in
+   * `layer`. Layers (e.g. "spelling", "comments") are independent. Returns
+   * how each one resolved: `stale` means its block/quote wasn't found.
+   */
+  setAnnotations: (layer: string, annotations: Annotation[]) => ResolvedAnnotation[]
+  /** Removes the annotations of `layer`, or all of them when omitted. */
+  clearAnnotations: (layer?: string) => void
+  /** Current annotations (active and stale) of `layer`, or of every layer. */
+  getAnnotations: (layer?: string) => ResolvedAnnotation[]
 }
 
 interface LinkPopoverState {
@@ -672,6 +696,9 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   onBlur,
   onImageUpload,
   onBlocksChange,
+  onAnnotationClick,
+  onAnnotationHover,
+  onAnnotationStatusChange,
   ariaLabel,
 }, ref) {
   const accessibleName = ariaLabel || placeholder
@@ -689,6 +716,8 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   // through a ref so a re-rendered host doesn't need to rebuild the editor.
   const onBlocksChangeRef = useRef(onBlocksChange)
   onBlocksChangeRef.current = onBlocksChange
+  const annotationHandlersRef = useRef({ onAnnotationClick, onAnnotationHover, onAnnotationStatusChange })
+  annotationHandlersRef.current = { onAnnotationClick, onAnnotationHover, onAnnotationStatusChange }
   const instanceId = useId()
   const slashListboxId = `cw-slash-${instanceId}`
 
@@ -811,6 +840,11 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
         TableHeader,
         slashExtension,
         BlockId.configure({ onBlocksChange: (change) => onBlocksChangeRef.current?.(change) }),
+        Annotations.configure({
+          onClick: (annotations, event) => annotationHandlersRef.current.onAnnotationClick?.(annotations, event),
+          onHover: (annotations, event) => annotationHandlersRef.current.onAnnotationHover?.(annotations, event),
+          onStatusChange: (annotations) => annotationHandlersRef.current.onAnnotationStatusChange?.(annotations),
+        }),
       ],
       extensions,
     ),
@@ -1013,6 +1047,9 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
       const blockId = editor.extensionManager.extensions.find((e) => e.name === 'blockId')
       return getBlocks(editor.state.doc, (blockId?.options as BlockIdOptions | undefined)?.types)
     },
+    setAnnotations: (layer, annotations) => editor ? setAnnotations(editor, layer, annotations) : [],
+    clearAnnotations: (layer) => { if (editor) clearAnnotations(editor, layer) },
+    getAnnotations: (layer) => editor ? getAnnotations(editor, layer) : [],
   }), [editor])
 
   return (

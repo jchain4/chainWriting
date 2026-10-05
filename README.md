@@ -70,6 +70,9 @@ function App() {
 | `onBlur` | `(editor: Editor, event: FocusEvent) => void` | — | Called when the editor loses focus |
 | `onImageUpload` | `(file: File) => Promise<string>` | — | Enables file-based image insertion — see "Rich content" |
 | `onBlocksChange` | `(change: BlocksChange) => void` | — | Called after each edit with the ids of added/changed/removed blocks — see "Blocks" |
+| `onAnnotationClick` | `(annotations: ResolvedAnnotation[], event: MouseEvent) => void` | — | Click on annotated text — see "Annotations" |
+| `onAnnotationHover` | `(annotations: ResolvedAnnotation[], event: MouseEvent) => void` | — | Pointer entering/leaving annotated text (`[]` on leave) — see "Annotations" |
+| `onAnnotationStatusChange` | `(annotations: ResolvedAnnotation[]) => void` | — | Annotations that became `stale` or `active` again after an edit — see "Annotations" |
 | `ariaLabel` | `string` | falls back to `placeholder` | Accessible name for the editing surface — see "Accessibility" |
 | `ref` | `Ref<EditorHandle>` | — | Imperative handle — see "Imperative API" |
 
@@ -104,6 +107,9 @@ function App() {
 | `isReady()` | Whether the underlying Tiptap editor has mounted |
 | `getEditor()` | Escape hatch — the raw Tiptap `Editor` instance, `null` until mounted |
 | `getBlocks()` | The document as a list of blocks with stable ids — see "Blocks" |
+| `setAnnotations(layer, annotations)` | Mark text by content in a named layer, replacing that layer — see "Annotations" |
+| `clearAnnotations(layer?)` | Remove one layer's annotations, or all of them |
+| `getAnnotations(layer?)` | Current annotations (active and stale) |
 
 There is no reactive `content` prop: Tiptap never re-parses content on prop changes, so pushing new content into a live editor always goes through `ref.current.setContent(...)`. The `editable` prop is the one exception to this construction-only rule — it's designed to be toggled live (e.g. a read-only "review" mode), so it's synced reactively on every render rather than only read once.
 
@@ -221,7 +227,37 @@ Every block of the document — paragraphs, headings, code blocks, images, horiz
 
 The tracked node types and the id generator are configurable by passing your own `BlockId.configure({ types, generateId, onBlocksChange })` via the `extensions` prop (it replaces the built-in one, so wire `onBlocksChange` there instead of on the prop). `getBlocks(doc)` and `diffBlocks(oldDoc, newDoc)` are also exported as standalone functions over a ProseMirror document.
 
+## Annotations: marking text by content
+
+Annotations let the host app — or an LLM it chooses to wire in — mark text by *what it says* rather than by position: "the phrase `quote` in block `blockId`" (block ids come from `getBlocks()`). That's exactly the kind of reference an LLM can produce reliably. Like highlights, annotations are a pure overlay: never in `getHTML()`/`getJSON()`, never an undo step.
+
+```tsx
+const results = editorRef.current!.setAnnotations('style', [
+  { id: 'r1', blockId: 'k3f9a1x2', quote: 'muy muy', kind: 'repetition', title: 'Repetición', data: { fix: 'muy' } },
+  { id: 'c1', blockId: 'p0d81mzq' }, // no quote: annotates the whole block
+])
+// results[i].status is 'active' (found and marked) or 'stale' (block/quote not found)
+
+<Editor
+  ref={editorRef}
+  onAnnotationClick={(annotations, event) => openPanel(annotations[0].data)}
+  onAnnotationHover={(annotations) => setHovered(annotations)}
+  onAnnotationStatusChange={(changed) => { /* e.g. drop issues the user already fixed */ }}
+/>
+```
+
+- **Layers** (`'spelling'`, `'style'`, `'comments'`…) are independent: `setAnnotations(layer, list)` replaces only that layer; `clearAnnotations(layer?)` removes one or all.
+- **Repeated phrases**: pass `prefix`/`suffix` (the text right before/after) to pick the right occurrence. Without them, the first occurrence in the block is used.
+- **While the user edits**, annotations follow their text — through typing elsewhere, Enter, and joining paragraphs (their `blockId` is updated if the text moves to another block). Typing right at the edge of a marked phrase doesn't stretch the mark.
+- **Stale**: when the marked text itself changes or disappears (e.g. the user rewrote the flagged phrase), the annotation becomes `stale` — unmarked, but kept. If the text comes back (undo, or retyped), it becomes `active` again. Both transitions are reported through `onAnnotationStatusChange`; changes caused by the host's own `setAnnotations`/`clearAnnotations` calls aren't.
+- **Events**: `onAnnotationClick` receives every active annotation under the click (they can overlap) and never prevents normal cursor placement. `onAnnotationHover` fires once per change, with `[]` when the pointer leaves.
+- **Styling**: inline marks get `.cw-annotation` and `.cw-annotation--{kind}`; whole-block ones `.cw-annotation-block` and `.cw-annotation-block--{kind}`; plus your own `className`. Default tokens: `--cw-annotation-bg`, `--cw-annotation-decoration`, `--cw-annotation-block-border`.
+
+Outside React, the same operations are exported as `setAnnotations(editor, layer, list)`, `clearAnnotations(editor, layer?)` and `getAnnotations(editor, layer?)` over the raw Tiptap editor, plus the `Annotations` extension and the `findQuote` matcher.
+
 ## Highlighting text ranges (e.g. AI style-check flags)
+
+> For new code, prefer **Annotations** (above): they're anchored by content, so they can be produced without knowing document positions and survive edits that change the marked text's position.
 
 `createHighlightPlugin`/`setHighlightRanges` give an AI integration (or any external analysis) a way to highlight arbitrary text ranges — flagged phrases, suggestions, comments — as a pure overlay: highlights never appear in `getHTML()`/`getJSON()` output and never add undo-history entries, since they're ProseMirror decorations, not document content.
 

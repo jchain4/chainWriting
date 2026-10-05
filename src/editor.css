@@ -33,6 +33,10 @@
   --cw-editor-padding: 3px 16px;
 
   --cw-highlight-decoration: underline wavy rgba(234, 179, 8, 0.7);
+
+  --cw-annotation-bg:           rgba(234, 179, 8, 0.18);
+  --cw-annotation-decoration:   underline rgba(234, 179, 8, 0.7);
+  --cw-annotation-block-border: rgba(234, 179, 8, 0.6);
 }
 
 /* ── Shared entry animation ── */
@@ -386,6 +390,18 @@
 .ProseMirror .cw-highlight-range {
   text-decoration: var(--cw-highlight-decoration);
   text-underline-offset: 3px;
+}
+
+.ProseMirror .cw-annotation {
+  background: var(--cw-annotation-bg);
+  text-decoration: var(--cw-annotation-decoration);
+  text-underline-offset: 3px;
+  border-radius: 2px;
+}
+
+.ProseMirror .cw-annotation-block {
+  box-shadow: inset 3px 0 0 var(--cw-annotation-block-border);
+  padding-left: 0.75em;
 }
 
 /* ── Links ── */

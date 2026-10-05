@@ -11,6 +11,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `getBlocks()` on `EditorHandle` — the document as a list of `{ id, type, text, attrs, ancestors }` blocks in reading order.
 - `onBlocksChange` prop — after each edit, reports the ids of added, updated and removed blocks plus a `version` counter, so hosts can re-analyze only what changed and discard stale async results.
 - `BlockId` extension and standalone `getBlocks(doc)`/`diffBlocks(oldDoc, newDoc)` helpers exported for advanced configuration.
+- Annotations: mark text by content (`{ id, blockId, quote }` — "this phrase in this block") instead of document positions, via `setAnnotations(layer, list)`/`clearAnnotations(layer?)`/`getAnnotations(layer?)` on `EditorHandle`. Independent named layers, optional `prefix`/`suffix` to disambiguate repeated phrases, whole-block annotations (no `quote`), `kind`/`className`/`title` styling and a free `data` payload. A pure overlay: never in HTML/JSON output, never an undo step.
+- Annotations follow their text through edits (typing elsewhere, Enter, joining blocks), never stretch when typing at their edges, and become `stale` when their text changes or disappears — and `active` again if it comes back (e.g. undo).
+- `onAnnotationClick`, `onAnnotationHover` and `onAnnotationStatusChange` props.
+- `--cw-annotation-bg`, `--cw-annotation-decoration`, `--cw-annotation-block-border` theming tokens.
+- `Annotations` extension and standalone `setAnnotations`/`clearAnnotations`/`getAnnotations`/`findQuote` exports for use with the raw Tiptap editor.
 
 ### Changed
 - `getHTML()`/`onChange` output now includes a `data-block-id` attribute on block elements, and `getJSON()` a `blockId` attribute.
