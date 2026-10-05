@@ -18,6 +18,10 @@ import {
   Annotations, setAnnotations, clearAnnotations, getAnnotations,
   type Annotation, type ResolvedAnnotation,
 } from '../lib/annotations'
+import {
+  Suggestions, addSuggestions, removeSuggestions, getSuggestions, acceptSuggestion, rejectSuggestion,
+  type Suggestion, type ResolvedSuggestion,
+} from '../lib/suggestions'
 import { UploadableImage } from '../lib/imageExtension'
 import { insertImageWithUpload } from '../lib/imageUpload'
 import { SlashCommand, type SlashCommandItem, type SlashCommandState, type SlashKeyHandler } from '../lib/slashCommandExtension'
@@ -85,6 +89,18 @@ export interface EditorProps {
    */
   onAnnotationStatusChange?: (annotations: ResolvedAnnotation[]) => void
   /**
+   * Show ✓/✕ buttons next to each suggestion (see addSuggestions()). Default
+   * true; set false to accept/reject from your own UI instead. Read once at
+   * construction.
+   */
+  showSuggestionControls?: boolean
+  /** A suggestion was accepted — from its ✓ button, Alt+Enter, or acceptSuggestion(). */
+  onSuggestionAccept?: (suggestion: ResolvedSuggestion) => void
+  /** A suggestion was rejected — from its ✕ button, Alt+Shift+Enter, or rejectSuggestion(). */
+  onSuggestionReject?: (suggestion: ResolvedSuggestion) => void
+  /** After an edit, the suggestions that became `stale` (their text changed meanwhile) or `active` again. */
+  onSuggestionStatusChange?: (suggestions: ResolvedSuggestion[]) => void
+  /**
    * Accessible name for the editing surface, exposed via aria-label on the
    * contenteditable element (role="textbox"). Falls back to `placeholder`
    * when omitted, so there is always a non-empty accessible name. Like
@@ -129,6 +145,21 @@ export interface EditorHandle {
   clearAnnotations: (layer?: string) => void
   /** Current annotations (active and stale) of `layer`, or of every layer. */
   getAnnotations: (layer?: string) => ResolvedAnnotation[]
+  /**
+   * Proposes changes, shown track-changes style until the user accepts or
+   * rejects them: `{ type: 'replace', id, blockId, quote, replacement }` or
+   * `{ type: 'insertAfter', id, blockId, text }`. A suggestion with an
+   * existing id replaces it. Returns how each resolved (`stale` = not found).
+   */
+  addSuggestions: (suggestions: Suggestion[]) => ResolvedSuggestion[]
+  /** Withdraws suggestions without accepting/rejecting them (no events) — all when `ids` is omitted. */
+  removeSuggestions: (ids?: string[]) => void
+  /** Current suggestions, active and stale. */
+  getSuggestions: () => ResolvedSuggestion[]
+  /** Applies a suggestion (one undo step). False if unknown or stale. */
+  acceptSuggestion: (id: string) => boolean
+  /** Discards a suggestion. False if unknown. */
+  rejectSuggestion: (id: string) => boolean
 }
 
 interface LinkPopoverState {
@@ -699,6 +730,10 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   onAnnotationClick,
   onAnnotationHover,
   onAnnotationStatusChange,
+  showSuggestionControls = true,
+  onSuggestionAccept,
+  onSuggestionReject,
+  onSuggestionStatusChange,
   ariaLabel,
 }, ref) {
   const accessibleName = ariaLabel || placeholder
@@ -718,6 +753,8 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   onBlocksChangeRef.current = onBlocksChange
   const annotationHandlersRef = useRef({ onAnnotationClick, onAnnotationHover, onAnnotationStatusChange })
   annotationHandlersRef.current = { onAnnotationClick, onAnnotationHover, onAnnotationStatusChange }
+  const suggestionHandlersRef = useRef({ onSuggestionAccept, onSuggestionReject, onSuggestionStatusChange })
+  suggestionHandlersRef.current = { onSuggestionAccept, onSuggestionReject, onSuggestionStatusChange }
   const instanceId = useId()
   const slashListboxId = `cw-slash-${instanceId}`
 
@@ -844,6 +881,12 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
           onClick: (annotations, event) => annotationHandlersRef.current.onAnnotationClick?.(annotations, event),
           onHover: (annotations, event) => annotationHandlersRef.current.onAnnotationHover?.(annotations, event),
           onStatusChange: (annotations) => annotationHandlersRef.current.onAnnotationStatusChange?.(annotations),
+        }),
+        Suggestions.configure({
+          showControls: showSuggestionControls,
+          onAccept: (suggestion) => suggestionHandlersRef.current.onSuggestionAccept?.(suggestion),
+          onReject: (suggestion) => suggestionHandlersRef.current.onSuggestionReject?.(suggestion),
+          onStatusChange: (suggestions) => suggestionHandlersRef.current.onSuggestionStatusChange?.(suggestions),
         }),
       ],
       extensions,
@@ -1050,6 +1093,11 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     setAnnotations: (layer, annotations) => editor ? setAnnotations(editor, layer, annotations) : [],
     clearAnnotations: (layer) => { if (editor) clearAnnotations(editor, layer) },
     getAnnotations: (layer) => editor ? getAnnotations(editor, layer) : [],
+    addSuggestions: (suggestions) => editor ? addSuggestions(editor, suggestions) : [],
+    removeSuggestions: (ids) => { if (editor) removeSuggestions(editor, ids) },
+    getSuggestions: () => editor ? getSuggestions(editor) : [],
+    acceptSuggestion: (id) => !!editor && acceptSuggestion(editor, id),
+    rejectSuggestion: (id) => !!editor && rejectSuggestion(editor, id),
   }), [editor])
 
   return (

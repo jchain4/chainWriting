@@ -16,6 +16,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `onAnnotationClick`, `onAnnotationHover` and `onAnnotationStatusChange` props.
 - `--cw-annotation-bg`, `--cw-annotation-decoration`, `--cw-annotation-block-border` theming tokens.
 - `Annotations` extension and standalone `setAnnotations`/`clearAnnotations`/`getAnnotations`/`findQuote` exports for use with the raw Tiptap editor.
+- Suggestions: proposed changes shown track-changes style until the user accepts or rejects them, via `addSuggestions(list)`/`acceptSuggestion(id)`/`rejectSuggestion(id)`/`removeSuggestions(ids?)`/`getSuggestions()` on `EditorHandle`. Two kinds, anchored by content like annotations: `replace` (a phrase in a block → new text; empty to delete) and `insertAfter` (new paragraphs after a block).
+- Accept/reject via ✓/✕ buttons (hidden in read-only mode, or with `showSuggestionControls={false}`), Alt+Enter / Alt+Shift+Enter with the cursor in the suggestion, or the handle methods. Accepting is a single undo step and keeps the replaced text's formatting.
+- Suggestions become `stale` (hidden, not acceptable) when the user changes the text they'd replace, so a proposal is never applied to text it wasn't written for — and `active` again if the text comes back.
+- `onSuggestionAccept`, `onSuggestionReject`, `onSuggestionStatusChange` props.
+- `--cw-suggestion-delete-color`, `--cw-suggestion-delete-bg`, `--cw-suggestion-insert-color`, `--cw-suggestion-insert-bg` theming tokens.
+- `Suggestions` extension and standalone `addSuggestions`/`acceptSuggestion`/`rejectSuggestion`/`removeSuggestions`/`getSuggestions` exports for use with the raw Tiptap editor.
 
 ### Changed
 - `getHTML()`/`onChange` output now includes a `data-block-id` attribute on block elements, and `getJSON()` a `blockId` attribute.

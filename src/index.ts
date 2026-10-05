@@ -32,3 +32,9 @@ export { BlockId, getBlocks, diffBlocks, DEFAULT_BLOCK_TYPES } from './lib/block
 export type { Block, BlocksChange, BlockIdOptions } from './lib/blockId'
 export { Annotations, setAnnotations, clearAnnotations, getAnnotations, findQuote } from './lib/annotations'
 export type { Annotation, AnnotationStatus, ResolvedAnnotation, AnnotationsOptions } from './lib/annotations'
+export {
+  Suggestions, addSuggestions, removeSuggestions, getSuggestions, acceptSuggestion, rejectSuggestion,
+} from './lib/suggestions'
+export type {
+  Suggestion, ReplaceSuggestion, InsertAfterSuggestion, ResolvedSuggestion, SuggestionStatus, SuggestionsOptions,
+} from './lib/suggestions'

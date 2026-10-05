@@ -73,6 +73,10 @@ function App() {
 | `onAnnotationClick` | `(annotations: ResolvedAnnotation[], event: MouseEvent) => void` | — | Click on annotated text — see "Annotations" |
 | `onAnnotationHover` | `(annotations: ResolvedAnnotation[], event: MouseEvent) => void` | — | Pointer entering/leaving annotated text (`[]` on leave) — see "Annotations" |
 | `onAnnotationStatusChange` | `(annotations: ResolvedAnnotation[]) => void` | — | Annotations that became `stale` or `active` again after an edit — see "Annotations" |
+| `showSuggestionControls` | `boolean` | `true` | Show ✓/✕ buttons next to suggestions. Read once at construction — see "Suggestions" |
+| `onSuggestionAccept` | `(suggestion: ResolvedSuggestion) => void` | — | A suggestion was accepted — see "Suggestions" |
+| `onSuggestionReject` | `(suggestion: ResolvedSuggestion) => void` | — | A suggestion was rejected — see "Suggestions" |
+| `onSuggestionStatusChange` | `(suggestions: ResolvedSuggestion[]) => void` | — | Suggestions that became `stale` or `active` again after an edit — see "Suggestions" |
 | `ariaLabel` | `string` | falls back to `placeholder` | Accessible name for the editing surface — see "Accessibility" |
 | `ref` | `Ref<EditorHandle>` | — | Imperative handle — see "Imperative API" |
 
@@ -110,6 +114,10 @@ function App() {
 | `setAnnotations(layer, annotations)` | Mark text by content in a named layer, replacing that layer — see "Annotations" |
 | `clearAnnotations(layer?)` | Remove one layer's annotations, or all of them |
 | `getAnnotations(layer?)` | Current annotations (active and stale) |
+| `addSuggestions(suggestions)` | Propose changes, shown track-changes style — see "Suggestions" |
+| `acceptSuggestion(id)` / `rejectSuggestion(id)` | Apply or discard a suggestion |
+| `removeSuggestions(ids?)` | Withdraw suggestions silently (all when omitted) |
+| `getSuggestions()` | Current suggestions (active and stale) |
 
 There is no reactive `content` prop: Tiptap never re-parses content on prop changes, so pushing new content into a live editor always goes through `ref.current.setContent(...)`. The `editable` prop is the one exception to this construction-only rule — it's designed to be toggled live (e.g. a read-only "review" mode), so it's synced reactively on every render rather than only read once.
 
@@ -254,6 +262,34 @@ const results = editorRef.current!.setAnnotations('style', [
 - **Styling**: inline marks get `.cw-annotation` and `.cw-annotation--{kind}`; whole-block ones `.cw-annotation-block` and `.cw-annotation-block--{kind}`; plus your own `className`. Default tokens: `--cw-annotation-bg`, `--cw-annotation-decoration`, `--cw-annotation-block-border`.
 
 Outside React, the same operations are exported as `setAnnotations(editor, layer, list)`, `clearAnnotations(editor, layer?)` and `getAnnotations(editor, layer?)` over the raw Tiptap editor, plus the `Annotations` extension and the `findQuote` matcher.
+
+## Suggestions: proposed changes the user accepts or rejects
+
+Suggestions let the host app — or an LLM it chooses to wire in — *propose* changes without making them. They're shown track-changes style (removed text struck through, new text highlighted), and nothing in the document changes until the user accepts one. Like annotations, they're anchored by content, using block ids from `getBlocks()`.
+
+```tsx
+editorRef.current!.addSuggestions([
+  // Replace a phrase (an empty replacement deletes it)
+  { type: 'replace', id: 's1', blockId: 'k3f9a1x2', quote: 'muy muy importante', replacement: 'crucial', title: 'Más conciso' },
+  // Add paragraphs after a block — one paragraph per non-empty line
+  { type: 'insertAfter', id: 's2', blockId: 'p0d81mzq', text: 'Una conclusión propuesta.' },
+])
+
+<Editor
+  ref={editorRef}
+  onSuggestionAccept={(s) => log('accepted', s.id)}
+  onSuggestionReject={(s) => log('rejected', s.id)}
+  onSuggestionStatusChange={(changed) => { /* e.g. ask the LLM again for the stale ones */ }}
+/>
+```
+
+- **Accepting**: the ✓ button, **Alt+Enter** with the cursor inside the suggestion (or inside the block of an `insertAfter`), or `acceptSuggestion(id)`. It's a single undo step and keeps the formatting of the replaced text. Accepted paragraphs get fresh block ids (and show up in `onBlocksChange`). Undoing an accepted change restores the text, but not the suggestion.
+- **Rejecting**: the ✕ button, **Alt+Shift+Enter**, or `rejectSuggestion(id)`. The document isn't touched. `removeSuggestions(ids?)` withdraws suggestions silently, without firing accept/reject events.
+- **While the user edits**, suggestions follow their text like annotations do. If the user changes the text a suggestion would replace, it becomes `stale`: it's hidden and can't be accepted, so a proposal is never applied to text it wasn't written for. It becomes `active` again if the text comes back (e.g. undo). Accepting one suggestion can make overlapping ones stale.
+- **Your own UI**: set `showSuggestionControls={false}` to hide the buttons and drive everything through `getSuggestions()`/`acceptSuggestion()`/`rejectSuggestion()` — e.g. from a side panel. Buttons are hidden automatically while the editor is read-only (`editable={false}`); `acceptSuggestion()` still works programmatically.
+- **Styling**: `.cw-suggestion-delete` (a `<del>`), `.cw-suggestion-insert` (an `<ins>`), `.cw-suggestion-block`, `.cw-suggestion-controls`, and the tokens `--cw-suggestion-delete-color`, `--cw-suggestion-delete-bg`, `--cw-suggestion-insert-color`, `--cw-suggestion-insert-bg`.
+
+Outside React, the same operations are exported as `addSuggestions(editor, list)`, `acceptSuggestion(editor, id)`, `rejectSuggestion(editor, id)`, `removeSuggestions(editor, ids?)` and `getSuggestions(editor)`, plus the `Suggestions` extension.
 
 ## Highlighting text ranges (e.g. AI style-check flags)
 

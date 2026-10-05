@@ -37,6 +37,11 @@
   --cw-annotation-bg:           rgba(234, 179, 8, 0.18);
   --cw-annotation-decoration:   underline rgba(234, 179, 8, 0.7);
   --cw-annotation-block-border: rgba(234, 179, 8, 0.6);
+
+  --cw-suggestion-delete-color: rgba(220, 38, 38, 0.85);
+  --cw-suggestion-delete-bg:    rgba(220, 38, 38, 0.08);
+  --cw-suggestion-insert-color: rgba(22, 163, 74, 0.95);
+  --cw-suggestion-insert-bg:    rgba(22, 163, 74, 0.1);
 }
 
 /* ── Shared entry animation ── */
@@ -472,4 +477,66 @@
   bottom: -2px;
   width: 4px;
   pointer-events: none;
+}
+
+/* ── Suggestions (track-changes style) ── */
+
+.ProseMirror .cw-suggestion-delete {
+  color: var(--cw-suggestion-delete-color);
+  background: var(--cw-suggestion-delete-bg);
+  text-decoration: line-through;
+}
+
+.ProseMirror .cw-suggestion-insert {
+  color: var(--cw-suggestion-insert-color);
+  background: var(--cw-suggestion-insert-bg);
+  text-decoration: none;
+}
+
+.ProseMirror .cw-suggestion-block {
+  border-left: 3px solid var(--cw-suggestion-insert-color);
+  padding-left: 0.75em;
+}
+
+.ProseMirror .cw-suggestion-controls {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: 4px;
+  vertical-align: middle;
+  user-select: none;
+}
+
+.ProseMirror .cw-suggestion-controls button {
+  font: inherit;
+  font-size: 0.8em;
+  line-height: 1;
+  padding: 2px 5px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+.ProseMirror .cw-suggestion-controls button:hover,
+.ProseMirror .cw-suggestion-controls button:focus-visible {
+  opacity: 1;
+}
+
+.ProseMirror .cw-suggestion-controls button:focus-visible {
+  outline: none;
+  box-shadow: var(--cw-focus-ring);
+}
+
+.ProseMirror .cw-suggestion-controls .cw-suggestion-accept { color: var(--cw-suggestion-insert-color); }
+.ProseMirror .cw-suggestion-controls .cw-suggestion-reject { color: var(--cw-suggestion-delete-color); }
+
+.ProseMirror .cw-suggestion-block .cw-suggestion-controls {
+  margin-left: 0;
+}
+
+/* Read-only editors can't apply changes. */
+.ProseMirror[contenteditable="false"] .cw-suggestion-controls {
+  display: none;
 }

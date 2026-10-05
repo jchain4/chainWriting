@@ -4,6 +4,9 @@ import { Plugin, PluginKey } from '@tiptap/pm/state'
 import type { EditorState } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
+import { lazyBlockIndex, mapAnchor, resolveAnchor, type AnchorRange } from './anchoring'
+
+export { findQuote } from './anchoring'
 
 /**
  * A mark the host app (or an LLM it chose to wire in) puts on the text. It's
@@ -79,92 +82,12 @@ export const annotationsPluginKey = new PluginKey<AnnotationsState>('cwAnnotatio
 
 const isWholeBlock = (a: Annotation) => !a.quote
 
-/** Index of block id → node, built at most once per transaction and only if needed. */
-function lazyBlockIndex(doc: ProseMirrorNode) {
-  let index: Map<string, { pos: number, node: ProseMirrorNode }> | undefined
-  return (id: string) => {
-    if (!index) {
-      const built = new Map<string, { pos: number, node: ProseMirrorNode }>()
-      doc.descendants((node, pos) => {
-        const blockId = node.attrs.blockId as string | null | undefined
-        if (blockId && !built.has(blockId)) built.set(blockId, { pos, node })
-        return !node.isTextblock
-      })
-      index = built
-    }
-    return index.get(id)
-  }
-}
+const withRange = (a: Annotation, layer: string, range: AnchorRange | null): ResolvedAnnotation => range
+  ? { ...a, layer, blockId: range.blockId, status: 'active', from: range.from, to: range.to }
+  : { ...a, layer, status: 'stale', from: null, to: null }
 
-const blockText = (node: ProseMirrorNode) => node.textBetween(0, node.content.size, '\n', '\n')
-
-/** Offset of the best occurrence of `quote` in `text`, or -1. */
-export function findQuote(text: string, quote: string, prefix?: string, suffix?: string): number {
-  let best = -1
-  let bestScore = -1
-  for (let i = text.indexOf(quote); i !== -1; i = text.indexOf(quote, i + 1)) {
-    const score = (prefix && text.slice(0, i).endsWith(prefix) ? 1 : 0)
-      + (suffix && text.slice(i + quote.length).startsWith(suffix) ? 1 : 0)
-    if (score > bestScore) {
-      best = i
-      bestScore = score
-    }
-  }
-  return best
-}
-
-function resolve(
-  a: Annotation,
-  layer: string,
-  findBlock: ReturnType<typeof lazyBlockIndex>,
-): ResolvedAnnotation {
-  const stale: ResolvedAnnotation = { ...a, layer, status: 'stale', from: null, to: null }
-  const block = findBlock(a.blockId)
-  if (!block) return stale
-  const { pos, node } = block
-  if (isWholeBlock(a)) return { ...a, layer, status: 'active', from: pos, to: pos + node.nodeSize }
-  if (!node.isTextblock) return stale
-  // Text offsets equal content offsets here: text is 1:1 and every inline
-  // leaf (hard break) is both one position and one "\n" character.
-  const offset = findQuote(blockText(node), a.quote!, a.prefix, a.suffix)
-  if (offset < 0) return stale
-  const from = pos + 1 + offset
-  return { ...a, layer, status: 'active', from, to: from + a.quote!.length }
-}
-
-/**
- * Carries an annotation over an edit: first by mapping its range (cheap, and
- * lets it follow its text even into another block, e.g. after joining two
- * paragraphs); if the mapped range no longer holds the quote, by searching
- * for the quote again in its block.
- */
-function carryOver(
-  a: ResolvedAnnotation,
-  doc: ProseMirrorNode,
-  map: (pos: number, assoc: number) => number,
-  findBlock: ReturnType<typeof lazyBlockIndex>,
-): ResolvedAnnotation {
-  if (a.status === 'active' && a.from !== null && a.to !== null) {
-    if (isWholeBlock(a)) {
-      const from = map(a.from, 1)
-      const node = doc.nodeAt(from)
-      if (node && node.attrs.blockId === a.blockId) return { ...a, from, to: from + node.nodeSize }
-    } else {
-      // Typing right at either edge of the quote shouldn't stretch it.
-      const from = map(a.from, 1)
-      const to = map(a.to, -1)
-      if (from < to) {
-        const $from = doc.resolve(from)
-        const $to = doc.resolve(to)
-        if ($from.sameParent($to) && $from.parent.isTextblock && doc.textBetween(from, to, '\n', '\n') === a.quote) {
-          const blockId = ($from.parent.attrs.blockId as string | null) || a.blockId
-          return { ...a, blockId, from, to }
-        }
-      }
-    }
-  }
-  return resolve(a, a.layer, findBlock)
-}
+const rangeOf = (a: ResolvedAnnotation): AnchorRange | null =>
+  a.status === 'active' && a.from !== null && a.to !== null ? { blockId: a.blockId, from: a.from, to: a.to } : null
 
 function buildDecorations(doc: ProseMirrorNode, layers: Layers): DecorationSet {
   const decorations: Decoration[] = []
@@ -241,14 +164,14 @@ export const Annotations = Extension.create<AnnotationsOptions>({
             const map = (pos: number, assoc: number) => tr.mapping.map(pos, assoc)
             layers = new Map([...layers].map(([name, annotations]) => [
               name,
-              new Map([...annotations].map(([id, a]) => [id, carryOver(a, newState.doc, map, findBlock)])),
+              new Map([...annotations].map(([id, a]) => [id, withRange(a, name, mapAnchor(a, rangeOf(a), newState.doc, map, findBlock))])),
             ]))
           }
 
           if (action) {
             layers = new Map(layers)
             if (action.type === 'set') {
-              layers.set(action.layer, new Map(action.annotations.map((a) => [a.id, resolve(a, action.layer, findBlock)])))
+              layers.set(action.layer, new Map(action.annotations.map((a) => [a.id, withRange(a, action.layer, resolveAnchor(a, findBlock))])))
             } else if (action.layer === undefined) {
               layers.clear()
             } else {

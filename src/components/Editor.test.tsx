@@ -121,6 +121,55 @@ describe('Editor', () => {
     expect(onAnnotationStatusChange).toHaveBeenCalledWith([expect.objectContaining({ id: 'x', status: 'stale' })])
   })
 
+  it('proposes, accepts and rejects suggestions through the ref handle, forwarding events to the latest props', async () => {
+    const onSuggestionAccept = vi.fn()
+    const onSuggestionReject = vi.fn()
+    const onSuggestionStatusChange = vi.fn()
+    const ref = createRef<EditorHandle>()
+    const initial = '<p data-block-id="a">The quick fox</p><p data-block-id="b">Second</p>'
+    const { rerender, container } = render(<Editor ref={ref} initialContent={initial} />)
+    await waitFor(() => expect(ref.current?.getBlocks()).toHaveLength(2))
+    rerender(<Editor
+      ref={ref}
+      initialContent={initial}
+      onSuggestionAccept={onSuggestionAccept}
+      onSuggestionReject={onSuggestionReject}
+      onSuggestionStatusChange={onSuggestionStatusChange}
+    />)
+
+    const results = ref.current!.addSuggestions([
+      { type: 'replace', id: 'r', blockId: 'a', quote: 'quick', replacement: 'slow' },
+      { type: 'insertAfter', id: 'i', blockId: 'b', text: 'Third' },
+      { type: 'replace', id: 'gone', blockId: 'b', quote: 'Second', replacement: '2nd' },
+    ])
+    expect(results.map((s) => s.status)).toEqual(['active', 'active', 'active'])
+    expect(container.querySelector('ins.cw-suggestion-insert')).toHaveTextContent('slow')
+
+    expect(ref.current!.acceptSuggestion('r')).toBe(true)
+    expect(onSuggestionAccept).toHaveBeenCalledWith(expect.objectContaining({ id: 'r' }))
+    expect(ref.current!.getBlocks()[0].text).toBe('The slow fox')
+
+    expect(ref.current!.rejectSuggestion('i')).toBe(true)
+    expect(onSuggestionReject).toHaveBeenCalledWith(expect.objectContaining({ id: 'i' }))
+
+    ref.current!.getEditor()!.commands.insertContentAt(ref.current!.getEditor()!.state.doc.content.size - 2, 'X')
+    expect(onSuggestionStatusChange).toHaveBeenCalledWith([expect.objectContaining({ id: 'gone', status: 'stale' })])
+
+    ref.current!.removeSuggestions()
+    expect(ref.current!.getSuggestions()).toEqual([])
+  })
+
+  it('hides the suggestion buttons with showSuggestionControls={false}', async () => {
+    const { ref, container } = await renderReadyEditor({
+      initialContent: '<p data-block-id="a">The quick fox</p>',
+      showSuggestionControls: false,
+    })
+    await waitFor(() => expect(ref.current!.getBlocks()).toHaveLength(1))
+    ref.current!.addSuggestions([{ type: 'replace', id: 'r', blockId: 'a', quote: 'quick', replacement: 'slow' }])
+    expect(container.querySelector('ins.cw-suggestion-insert')).toBeInTheDocument()
+    expect(container.querySelector('.cw-suggestion-controls')).toBeNull()
+  })
+
   it('renders the .cw-editor root without throwing', async () => {
     const { container } = await renderReadyEditor()
     expect(container.querySelector('.cw-editor')).toBeInTheDocument()
