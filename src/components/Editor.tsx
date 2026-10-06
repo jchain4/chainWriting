@@ -1,6 +1,6 @@
 'use client'
 
-import { forwardRef, useCallback, useEffect, useId, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
@@ -27,6 +27,7 @@ import { UploadableImage } from '../lib/imageExtension'
 import { insertImageWithUpload } from '../lib/imageUpload'
 import { SlashCommand, type SlashCommandItem, type SlashCommandState, type SlashKeyHandler } from '../lib/slashCommandExtension'
 import { useRovingToolbar, type RovingToolbarHandle } from '../hooks/useRovingToolbar'
+import { isOffscreen, useKeepInViewport, useViewportChange, VIEWPORT_MARGIN } from '../hooks/useFloating'
 import {
   IconHeading1, IconHeading2, IconHeading3, IconHeadings,
   IconBulletList, IconOrderedList, IconQuote,
@@ -225,7 +226,7 @@ function useBubblePos(editor: TiptapEditor | null, toolbarRef: RefObject<HTMLDiv
       const sel = window.getSelection()
       if (!sel || sel.rangeCount === 0) { setCoords(null); return }
       const rect = sel.getRangeAt(0).getBoundingClientRect()
-      if (!rect.width) { setCoords(null); return }
+      if (!rect.width || isOffscreen(rect)) { setCoords(null); return }
       const bubbleH = 36
       const gap = 8
       const top = rect.top - bubbleH - gap >= 0 ? rect.top - bubbleH - gap : rect.bottom + gap
@@ -243,11 +244,27 @@ function useBubblePos(editor: TiptapEditor | null, toolbarRef: RefObject<HTMLDiv
       }, 150)
     }
     const cancelClear = () => clearTimeout(blurTimer)
+    // Fixed-position, so it must be re-placed when the page or any scroll
+    // container scrolls, or the window resizes — but only while the user is
+    // actually in the editor (a blurred selection keeps no bubble).
+    let frame: number | null = null
+    const onViewportChange = () => {
+      if (frame !== null) return
+      frame = requestAnimationFrame(() => {
+        frame = null
+        if (editor.view.hasFocus() || toolbarRef.current?.contains(document.activeElement)) update()
+      })
+    }
+    window.addEventListener('scroll', onViewportChange, { capture: true, passive: true })
+    window.addEventListener('resize', onViewportChange)
     editor.on('selectionUpdate', update)
     editor.on('blur', clear)
     editor.on('focus', cancelClear)
     return () => {
       clearTimeout(blurTimer)
+      if (frame !== null) cancelAnimationFrame(frame)
+      window.removeEventListener('scroll', onViewportChange, { capture: true })
+      window.removeEventListener('resize', onViewportChange)
       editor.off('selectionUpdate', update)
       editor.off('blur', clear)
       editor.off('focus', cancelClear)
@@ -265,6 +282,7 @@ const BubbleToolbar = forwardRef<RovingToolbarHandle, {
 }>(function BubbleToolbar({ editor, onLinkClick }, ref) {
   const toolbarRef = useRef<HTMLDivElement>(null)
   const coords = useBubblePos(editor, toolbarRef)
+  useKeepInViewport(toolbarRef, [coords?.top, coords?.left])
   const roving = useRovingToolbar({
     count: 9,
     active: coords !== null,
@@ -336,6 +354,7 @@ function LinkPopover({
   const ref = useRef<HTMLDivElement>(null)
   const textInputRef = useRef<HTMLInputElement>(null)
   const urlInputRef = useRef<HTMLInputElement>(null)
+  useKeepInViewport(ref, [state.top, state.left])
 
   useEffect(() => {
     if (!state.hasSelection) {
@@ -433,6 +452,9 @@ const SlashMenu = forwardRef<SlashKeyHandler, {
   const [focusZone, setFocusZone] = useState<'main' | 'flyout'>('main')
 
   const menuRef = useRef<HTMLDivElement>(null)
+  const flyoutRef = useRef<HTMLDivElement>(null)
+  useKeepInViewport(menuRef, [coords.top, coords.left])
+  useKeepInViewport(flyoutRef, [flyoutPos?.top, flyoutPos?.left, flyoutItem])
   const itemRefs = useRef(new Map<string, HTMLButtonElement>())
 
   const openFlyout = useCallback((item: SlashCommandItem) => {
@@ -451,6 +473,16 @@ const SlashMenu = forwardRef<SlashKeyHandler, {
     setFlyoutItem(item)
     setFlyoutSelected(0)
   }, [])
+
+  // When the main menu moves (it follows the text on scroll), move an open
+  // flyout along with it, without resetting its highlighted item.
+  useLayoutEffect(() => {
+    if (!flyoutItem) return
+    const btn = itemRefs.current.get(flyoutItem.id)
+    const menuEl = menuRef.current
+    if (btn && menuEl) setFlyoutPos({ top: btn.getBoundingClientRect().top, left: menuEl.getBoundingClientRect().right + 6 })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coords.top, coords.left])
 
   const closeFlyout = useCallback(() => {
     setFlyoutItem(null)
@@ -557,7 +589,7 @@ const SlashMenu = forwardRef<SlashKeyHandler, {
         )}
       </div>
       {flyoutItem && flyoutPos && (
-        <div role="listbox" aria-label={flyoutItem.label} className="cw-slash-menu cw-slash-menu--flyout" style={{ position: 'fixed', top: flyoutPos.top, left: flyoutPos.left }}>
+        <div ref={flyoutRef} role="listbox" aria-label={flyoutItem.label} className="cw-slash-menu cw-slash-menu--flyout" style={{ position: 'fixed', top: flyoutPos.top, left: flyoutPos.left }}>
           {(flyoutItem.children ?? []).map((child, i) => (
             <button
               key={child.id}
@@ -598,14 +630,27 @@ function useTableToolbarPos(editor: TiptapEditor | null) {
         const tableEl = el?.closest('table')
         if (!tableEl) { setCoords(null); return }
         const rect = tableEl.getBoundingClientRect()
-        setCoords({ top: rect.top - 40, left: rect.left })
+        // Hide once the table has scrolled away; while part of it is still
+        // in view, keep the toolbar on screen (stuck to the top edge).
+        if (rect.bottom < 48 || rect.top > window.innerHeight) { setCoords(null); return }
+        setCoords({ top: Math.max(VIEWPORT_MARGIN, rect.top - 40), left: rect.left })
       } catch {
         setCoords(null)
       }
     }
+    let frame: number | null = null
+    const onViewportChange = () => {
+      if (frame !== null) return
+      frame = requestAnimationFrame(() => { frame = null; update() })
+    }
+    window.addEventListener('scroll', onViewportChange, { capture: true, passive: true })
+    window.addEventListener('resize', onViewportChange)
     editor.on('selectionUpdate', update)
     editor.on('transaction', update)
     return () => {
+      if (frame !== null) cancelAnimationFrame(frame)
+      window.removeEventListener('scroll', onViewportChange, { capture: true })
+      window.removeEventListener('resize', onViewportChange)
       editor.off('selectionUpdate', update)
       editor.off('transaction', update)
     }
@@ -616,6 +661,8 @@ function useTableToolbarPos(editor: TiptapEditor | null) {
 
 const TableToolbar = forwardRef<RovingToolbarHandle, { editor: TiptapEditor }>(function TableToolbar({ editor }, ref) {
   const coords = useTableToolbarPos(editor)
+  const rootRef = useRef<HTMLDivElement>(null)
+  useKeepInViewport(rootRef, [coords?.top, coords?.left])
   const roving = useRovingToolbar({
     count: 5,
     active: coords !== null,
@@ -640,7 +687,7 @@ const TableToolbar = forwardRef<RovingToolbarHandle, { editor: TiptapEditor }>(f
   )
 
   return (
-    <div role="toolbar" aria-label="Tabla" className="cw-bubble-menu cw-table-menu" style={{ position: 'fixed', top: coords.top, left: coords.left }}>
+    <div ref={rootRef} role="toolbar" aria-label="Tabla" className="cw-bubble-menu cw-table-menu" style={{ position: 'fixed', top: coords.top, left: coords.left }}>
       {btn(0, '+Fila', 'Añadir fila', 'Añadir fila', () => editor.chain().focus().addRowAfter().run())}
       {btn(1, '+Col', 'Añadir columna', 'Añadir columna', () => editor.chain().focus().addColumnAfter().run())}
       <div className="cw-bubble-menu__divider" />
@@ -658,6 +705,8 @@ TableToolbar.displayName = 'TableToolbar'
 interface ImageInsertState {
   top: number
   left: number
+  /** Document position the popover is anchored to, to re-place it on scroll. */
+  pos: number
 }
 
 function ImageInsertPopover({
@@ -677,6 +726,7 @@ function ImageInsertPopover({
   const [alt, setAlt] = useState('')
   const ref = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  useKeepInViewport(ref, [state.top, state.left])
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -830,6 +880,17 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   // execute callback) — useMemo's factory runs synchronously during render,
   // unlike the deferred event handlers elsewhere in this file, so openLink
   // must already exist by the time slashItems is computed.
+  const linkPosition = useCallback((ed: TiptapEditor, from: number, to: number) => {
+    const startCoords = ed.view.coordsAtPos(from)
+    const endCoords = ed.view.coordsAtPos(to)
+    const popoverH = 44
+    const gap = 10
+    const top = startCoords.bottom + popoverH + gap < window.innerHeight
+      ? startCoords.bottom + gap
+      : startCoords.top - popoverH - gap
+    return { top, left: (startCoords.left + endCoords.right) / 2 }
+  }, [])
+
   const openLink = useCallback((ed: TiptapEditor) => {
     const { from, to } = ed.state.selection
     // No early-return on a collapsed selection here: both existing callers
@@ -839,18 +900,10 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     // command menu is the one caller that deliberately wants to open this
     // with a collapsed selection, to insert a brand new link.
     try {
-      const startCoords = ed.view.coordsAtPos(from)
-      const endCoords = ed.view.coordsAtPos(to)
-      const midX = (startCoords.left + endCoords.right) / 2
-      const popoverH = 44
-      const gap = 10
-      const top = startCoords.bottom + popoverH + gap < window.innerHeight
-        ? startCoords.bottom + gap
-        : startCoords.top - popoverH - gap
       const initialUrl = (ed.getAttributes('link').href as string) ?? ''
-      setLinkState({ top, left: midX, from, to, initialUrl, hasSelection: from !== to })
+      setLinkState({ ...linkPosition(ed, from, to), from, to, initialUrl, hasSelection: from !== to })
     } catch {}
-  }, [])
+  }, [linkPosition])
 
   const slashItems = useMemo<SlashCommandItem[]>(() => [
     {
@@ -898,7 +951,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
       execute: ({ editor, range }) => {
         editor.chain().focus().deleteRange(range).run()
         const coords = editor.view.coordsAtPos(editor.state.selection.from)
-        setImageInsertState({ top: coords.bottom + 8, left: coords.left })
+        setImageInsertState({ top: coords.bottom + 8, left: coords.left, pos: editor.state.selection.from })
       },
     },
     {
@@ -1061,6 +1114,26 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
       onBlur?.(editor, event)
     },
   })
+
+  // The link and image popovers are fixed-position too: re-place them from
+  // their document position when the page or a scroll container scrolls.
+  useViewportChange(() => {
+    if (!editor) return
+    setLinkState((s) => {
+      if (!s) return s
+      try { return { ...s, ...linkPosition(editor, s.from, s.to) } } catch { return s }
+    })
+  }, !!linkState)
+  useViewportChange(() => {
+    if (!editor) return
+    setImageInsertState((s) => {
+      if (!s) return s
+      try {
+        const c = editor.view.coordsAtPos(s.pos)
+        return { ...s, top: c.bottom + 8, left: c.left }
+      } catch { return s }
+    })
+  }, !!imageInsertState)
 
   const handleImageFile = useCallback((file: File, alt?: string) => {
     if (!editor || !onImageUpload) return

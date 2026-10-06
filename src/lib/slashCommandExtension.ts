@@ -77,9 +77,30 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
         command: ({ range, props: item }) => {
           item.execute?.({ editor: this.editor, range })
         },
-        render: () => ({
-          onStart: emit,
-          onUpdate: emit,
+        render: () => {
+          // The menu is fixed-position: while it's open, re-place it when
+          // the page or any scroll container scrolls, or the window resizes.
+          let last: Parameters<typeof emit>[0] | null = null
+          let frame: number | null = null
+          const onViewportChange = () => {
+            if (frame !== null || !last) return
+            frame = requestAnimationFrame(() => { frame = null; if (last) emit(last) })
+          }
+          const stopFollowing = () => {
+            if (frame !== null) cancelAnimationFrame(frame)
+            frame = null
+            last = null
+            window.removeEventListener('scroll', onViewportChange, { capture: true })
+            window.removeEventListener('resize', onViewportChange)
+          }
+          return {
+          onStart: (props) => {
+            last = props
+            window.addEventListener('scroll', onViewportChange, { capture: true, passive: true })
+            window.addEventListener('resize', onViewportChange)
+            emit(props)
+          },
+          onUpdate: (props) => { last = props; emit(props) },
           // The key handler (SlashMenu) gets first refusal on every key,
           // including Escape — it needs to decide between "go back one
           // level" (inside a submenu) and "close entirely". Only falls back
@@ -89,8 +110,9 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
             if (props.event.key === 'Escape') { onStateChange(null); return true }
             return false
           },
-          onExit: () => onStateChange(null),
-        }),
+          onExit: () => { stopFollowing(); onStateChange(null) },
+          }
+        },
       }),
     ]
   },

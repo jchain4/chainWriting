@@ -12,6 +12,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 - The editor no longer shows a 2px focus ring the whole time it's being written in. The default look is now the `volume` surface; pass `surface="ring"` to keep the previous look. `--cw-focus-ring` is still shown, on every surface, when the editor is reached with the keyboard (Tab), until the user types or clicks — so keyboard focus stays visible (WCAG 2.4.7).
 - `volume` and `glass` default `--cw-editor-padding` to `10px 16px` (previously `3px 16px` everywhere). A value set by the host still wins.
+- `--cw-table-border` and `--cw-table-header-bg` now default to the host's text colour mixed in (16% and 5%), instead of white-alpha values that were only visible on dark pages.
+
+### Fixed
+- Floating menus and popovers (bubble menu, table toolbar, `/` menu and its submenu, link and image popovers) could overflow the viewport — e.g. the bubble menu started 80px off-screen when selecting a word near the left edge of a phone screen. They're now kept at least 8px inside it.
+- Floating menus and popovers stayed put when the page — or any scroll container around the editor — scrolled, or the window resized, detaching from their text. They now follow it. The bubble menu hides while its selection is scrolled out of view and comes back with it; the table toolbar sticks to the top edge while a long table is partly scrolled away, and hides once it's gone.
+- Table borders and header backgrounds were invisible on light pages (see Changed).
 
 ## [0.5.0] - 2026-10-06
 

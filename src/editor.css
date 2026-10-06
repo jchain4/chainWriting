@@ -25,8 +25,9 @@
   --cw-placeholder-opacity: 0.35;
   --cw-link-color:          currentColor;
 
-  --cw-table-border:           rgba(255, 255, 255, 0.14);
-  --cw-table-header-bg:        rgba(255, 255, 255, 0.05);
+  /* Mixed from the host's text colour, so tables read on light and dark pages. */
+  --cw-table-border:           color-mix(in srgb, currentColor 16%, transparent);
+  --cw-table-header-bg:        color-mix(in srgb, currentColor 5%, transparent);
   --cw-table-cell-selected-bg: rgba(99, 102, 241, 0.18);
 
   --cw-focus-ring: 0 0 0 2px rgba(99, 102, 241, 0.6);

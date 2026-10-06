@@ -1,6 +1,6 @@
 import { createRef, StrictMode } from 'react'
 import { fireEvent, render, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Extension } from '@tiptap/react'
 import { PluginKey } from '@tiptap/pm/state'
 import { Editor, type EditorHandle, type EditorSurface } from './Editor'
@@ -25,6 +25,18 @@ function mockSelectionRect() {
     Range.prototype.getBoundingClientRect = originalRect
     Range.prototype.getClientRects = originalRects
   }
+}
+
+/**
+ * jsdom does no layout, so every element measures 0×0 at the top of the
+ * page — which the table toolbar (rightly) treats as "the table scrolled out
+ * of view". Give tables a realistic on-screen box instead.
+ */
+function mockTableRect(rect: Partial<DOMRect> = {}) {
+  const box = { width: 300, height: 100, top: 200, bottom: 300, left: 20, right: 320, x: 20, y: 200, toJSON: () => {}, ...rect } as DOMRect
+  const original = HTMLTableElement.prototype.getBoundingClientRect
+  HTMLTableElement.prototype.getBoundingClientRect = () => box
+  return () => { HTMLTableElement.prototype.getBoundingClientRect = original }
 }
 
 async function renderReadyEditor(props: Partial<React.ComponentProps<typeof Editor>> = {}) {
@@ -218,6 +230,154 @@ describe('Editor', () => {
     expect(ref.current!.getBlocks()[0].text).toBe('The slow fox')
   })
 
+  describe('floating UI follows the text', () => {
+    const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+
+    /** Like mockSelectionRect, but the rect can be moved — as scrolling would. */
+    function movableSelectionRect() {
+      const rect = { width: 100, height: 20, top: 300, bottom: 320, left: 50, right: 150, x: 50, y: 300, toJSON: () => {} }
+      const originalRect = Range.prototype.getBoundingClientRect
+      const originalRects = Range.prototype.getClientRects
+      Range.prototype.getBoundingClientRect = function () { return { ...rect } as DOMRect }
+      Range.prototype.getClientRects = function () { return [{ ...rect }] as unknown as DOMRectList }
+      const moveTo = (top: number) => Object.assign(rect, { top, bottom: top + 20, y: top })
+      return {
+        moveTo,
+        restore: () => {
+          Range.prototype.getBoundingClientRect = originalRect
+          Range.prototype.getClientRects = originalRects
+        },
+      }
+    }
+
+    function cleanupFocus() {
+      ;(document.activeElement as HTMLElement | null)?.blur()
+      window.getSelection()?.removeAllRanges()
+    }
+
+    async function withSelectedText() {
+      const rect = movableSelectionRect()
+      const utils = await renderReadyEditor({ initialContent: '<p>hello world</p>' })
+      // Focus first and wait for it (Tiptap focuses on the next frame), so the
+      // DOM selection exists by the time the bubble measures it.
+      const editor = utils.ref.current!.getEditor()!
+      editor.commands.focus()
+      await waitFor(() => expect(document.activeElement).toBe(editor.view.dom))
+      editor.commands.setTextSelection({ from: 1, to: 6 })
+      await waitFor(() => expect(utils.container.querySelector('.cw-bubble-menu')).toBeInTheDocument())
+      const bubbleTop = () => (utils.container.querySelector('.cw-bubble-menu') as HTMLElement | null)?.style.top
+      return { ...utils, ...rect, bubbleTop }
+    }
+
+    it('re-places the bubble menu when the page scrolls', async () => {
+      const { moveTo, restore, bubbleTop } = await withSelectedText()
+      try {
+        expect(bubbleTop()).toBe('256px') // 300 - 36 - 8
+        moveTo(200)
+        window.dispatchEvent(new Event('scroll'))
+        await waitFor(() => expect(bubbleTop()).toBe('156px'))
+      } finally { cleanupFocus(); restore() }
+    })
+
+    it('re-places it when a scroll container (not the page) scrolls', async () => {
+      const { moveTo, restore, bubbleTop } = await withSelectedText()
+      const panel = document.createElement('div')
+      document.body.append(panel)
+      try {
+        moveTo(150)
+        panel.dispatchEvent(new Event('scroll'))
+        await waitFor(() => expect(bubbleTop()).toBe('106px'))
+      } finally { panel.remove(); cleanupFocus(); restore() }
+    })
+
+    it('hides the bubble while the selection is scrolled out of view, and brings it back', async () => {
+      const { moveTo, restore, container } = await withSelectedText()
+      try {
+        moveTo(-200)
+        window.dispatchEvent(new Event('scroll'))
+        await waitFor(() => expect(container.querySelector('.cw-bubble-menu')).toBeNull())
+        moveTo(300)
+        window.dispatchEvent(new Event('scroll'))
+        await waitFor(() => expect(container.querySelector('.cw-bubble-menu')).toBeInTheDocument())
+      } finally { cleanupFocus(); restore() }
+    })
+
+    it('does not bring the bubble back on scroll once the editor lost focus', async () => {
+      const { restore, container, ref } = await withSelectedText()
+      try {
+        const editor = ref.current!.getEditor()!
+        editor.commands.blur()
+        await waitFor(() => expect(container.querySelector('.cw-bubble-menu')).toBeNull())
+        // In a real browser the text can stay selected after the editor loses
+        // focus (e.g. switching tabs); reproduce that before scrolling.
+        const range = document.createRange()
+        range.selectNodeContents(editor.view.dom.querySelector('p')!)
+        window.getSelection()!.addRange(range)
+        window.dispatchEvent(new Event('scroll'))
+        await nextFrame()
+        await new Promise((r) => setTimeout(r, 200))
+        expect(container.querySelector('.cw-bubble-menu')).toBeNull()
+      } finally { cleanupFocus(); restore() }
+    })
+
+    it('re-places the link popover when the page scrolls', async () => {
+      const { moveTo, restore, container } = await withSelectedText()
+      try {
+        fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
+        await waitFor(() => expect(container.querySelector('.cw-link-popover')).toBeInTheDocument())
+        const popoverTop = () => (container.querySelector('.cw-link-popover') as HTMLElement).style.top
+        expect(popoverTop()).toBe('330px') // bottom 320 + 10
+        moveTo(100)
+        window.dispatchEvent(new Event('scroll'))
+        await waitFor(() => expect(popoverTop()).toBe('130px'))
+      } finally { cleanupFocus(); restore() }
+    })
+
+    describe('table toolbar', () => {
+      async function inTable(rect: Partial<DOMRect>) {
+        const restoreTable = mockTableRect(rect)
+        const utils = await renderReadyEditor()
+        utils.ref.current!.getEditor()!.chain().focus().insertTable({ rows: 2, cols: 2, withHeaderRow: true }).run()
+        const toolbar = () => utils.container.querySelector('.cw-table-menu') as HTMLElement | null
+        return { ...utils, restoreTable, toolbar }
+      }
+
+      it('sits just above the table', async () => {
+        const { toolbar, restoreTable } = await inTable({ top: 200, bottom: 300 })
+        try {
+          await waitFor(() => expect(toolbar()?.style.top).toBe('160px'))
+        } finally { cleanupFocus(); restoreTable() }
+      })
+
+      it('sticks to the top edge while a long table is scrolled partly out of view', async () => {
+        const { toolbar, restoreTable } = await inTable({ top: -400, bottom: 300 })
+        try {
+          await waitFor(() => expect(toolbar()?.style.top).toBe('8px'))
+        } finally { cleanupFocus(); restoreTable() }
+      })
+
+      it('hides once the table has scrolled away', async () => {
+        const { toolbar, restoreTable } = await inTable({ top: -400, bottom: 30 })
+        try {
+          await new Promise((r) => setTimeout(r, 50))
+          expect(toolbar()).toBeNull()
+        } finally { cleanupFocus(); restoreTable() }
+      })
+
+      it('follows the table when the page scrolls', async () => {
+        const box = { top: 200, bottom: 300 }
+        const { toolbar, restoreTable } = await inTable(box)
+        restoreTable()
+        const restoreMoved = mockTableRect({ top: 120, bottom: 220 })
+        try {
+          await waitFor(() => expect(toolbar()).not.toBeNull())
+          window.dispatchEvent(new Event('scroll'))
+          await waitFor(() => expect(toolbar()?.style.top).toBe('80px'))
+        } finally { cleanupFocus(); restoreMoved() }
+      })
+    })
+  })
+
   describe('surface and keyboard focus ring', () => {
     const root = (container: HTMLElement) => container.querySelector('.cw-editor')!
 
@@ -326,6 +486,9 @@ describe('Editor', () => {
       const surfaces: EditorSurface[] = ['volume', 'glass', 'hairline', 'ring', 'underline']
       for (const surface of surfaces) expect(css).toContain(`[data-surface="${surface}"]`)
       expect(css).toContain('.cw-editor[data-keyboard-focus] .ProseMirror:focus')
+      // Table colours follow the page's text colour, so they show on light pages too.
+      expect(css).toMatch(/--cw-table-border:\s*color-mix\(in srgb, currentColor/)
+      expect(css).toMatch(/--cw-table-header-bg:\s*color-mix\(in srgb, currentColor/)
     })
   })
 
@@ -581,6 +744,10 @@ describe('Editor', () => {
   })
 
   describe('accessibility', () => {
+    let restoreTableRect: () => void
+    beforeEach(() => { restoreTableRect = mockTableRect() })
+    afterEach(() => restoreTableRect())
+
     it('does not preventDefault on Tab when no floating toolbar is visible (keyboard-trap regression guard)', async () => {
       const { ref } = await renderReadyEditor()
       const dom = ref.current!.getEditor()!.view.dom
