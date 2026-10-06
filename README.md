@@ -73,6 +73,7 @@ function App() {
 | `onFocus` | `(editor: Editor, event: FocusEvent) => void` | — | Called when the editor gains focus |
 | `onBlur` | `(editor: Editor, event: FocusEvent) => void` | — | Called when the editor loses focus |
 | `onImageUpload` | `(file: File) => Promise<string>` | — | Enables file-based image insertion — see "Rich content" |
+| `onReady` | `(blocks: Block[]) => void` | — | Called once, when the editor has mounted and every block has its id — see "When is the editor ready?" |
 | `onBlocksChange` | `(change: BlocksChange) => void` | — | Called after each edit with the ids of added/changed/removed blocks — see "Blocks" |
 | `onAnnotationClick` | `(annotations: ResolvedAnnotation[], event: MouseEvent) => void` | — | Click on annotated text — see "Annotations" |
 | `onAnnotationHover` | `(annotations: ResolvedAnnotation[], event: MouseEvent) => void` | — | Pointer entering/leaving annotated text (`[]` on leave) — see "Annotations" |
@@ -112,7 +113,7 @@ function App() {
 | `getJSON()` | Current content as Tiptap JSON |
 | `setContent(content, options?)` | Replace the whole document — the correct way to load new content into a live editor |
 | `clear()` | Clear the whole document |
-| `isReady()` | Whether the underlying Tiptap editor has mounted |
+| `isReady()` | Whether the editor has mounted and every block has its id (the moment `onReady` fires) |
 | `getEditor()` | Escape hatch — the raw Tiptap `Editor` instance, `null` until mounted |
 | `getBlocks()` | The document as a list of blocks with stable ids — see "Blocks" |
 | `setAnnotations(layer, annotations)` | Mark text by content in a named layer, replacing that layer — see "Annotations" |
@@ -238,6 +239,23 @@ Every block of the document — paragraphs, headings, code blocks, images, horiz
 - Ids are assigned right after mount without counting as an edit: no `onChange`/`onBlocksChange` call and no undo step. Content loaded without ids (or via `setContent`) gets fresh random ones.
 
 The tracked node types and the id generator are configurable by passing your own `BlockId.configure({ types, generateId, onBlocksChange })` via the `extensions` prop (it replaces the built-in one, so wire `onBlocksChange` there instead of on the prop). `getBlocks(doc)` and `diffBlocks(oldDoc, newDoc)` are also exported as standalone functions over a ProseMirror document.
+
+### When is the editor ready?
+
+The editor mounts asynchronously (it's SSR-safe, so it isn't created during render), and block ids are assigned right after that. Anything that refers to blocks — `setAnnotations()`, `addSuggestions()` — must wait until then, or it finds nothing. Use `onReady`, which fires once with the initial blocks, instead of polling:
+
+```tsx
+<Editor
+  ref={editorRef}
+  initialContent={html}
+  onReady={(blocks) => {
+    // The ref handle is already usable here.
+    editorRef.current!.setAnnotations('readability', analyze(blocks))
+  }}
+/>
+```
+
+Calling `setAnnotations()`/`addSuggestions()` before that logs a one-time `console.warn`, since otherwise they'd silently have no effect.
 
 ## Annotations: marking text by content
 

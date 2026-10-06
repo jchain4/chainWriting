@@ -1,4 +1,4 @@
-import { createRef } from 'react'
+import { createRef, StrictMode } from 'react'
 import { fireEvent, render, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { Extension } from '@tiptap/react'
@@ -185,6 +185,90 @@ describe('Editor', () => {
 
     expect(ref.current!.acceptSuggestion('assistant-s1')).toBe(true)
     expect(ref.current!.getBlocks()[0].text).toBe('The slow fox')
+  })
+
+  describe('onReady / isReady', () => {
+    it('calls onReady once, with the initial blocks already carrying ids', async () => {
+      const onReady = vi.fn()
+      const ref = createRef<EditorHandle>()
+      render(<Editor ref={ref} initialContent="<h2>Title</h2><p>Body</p>" onReady={onReady} />)
+      await waitFor(() => expect(onReady).toHaveBeenCalledTimes(1))
+      const [blocks] = onReady.mock.calls[0]
+      expect(blocks.map((b: { type: string, text: string }) => [b.type, b.text])).toEqual([['heading', 'Title'], ['paragraph', 'Body']])
+      expect(blocks.every((b: { id: string }) => b.id)).toBe(true)
+      expect(blocks).toEqual(ref.current!.getBlocks())
+    })
+
+    it('lets the host use the ref handle inside onReady', async () => {
+      const ref = createRef<EditorHandle>()
+      let result: unknown
+      render(<Editor
+        ref={ref}
+        initialContent="<p>The quick fox</p>"
+        onReady={(blocks) => {
+          result = ref.current!.setAnnotations('test', [{ id: 'x', blockId: blocks[0].id, quote: 'quick' }])
+        }}
+      />)
+      await waitFor(() => expect(result).toEqual([expect.objectContaining({ id: 'x', status: 'active' })]))
+    })
+
+    it('does not call onReady again after edits, setContent or re-renders', async () => {
+      const onReady = vi.fn()
+      const ref = createRef<EditorHandle>()
+      const { rerender } = render(<Editor ref={ref} initialContent="<p>One</p>" onReady={onReady} />)
+      await waitFor(() => expect(onReady).toHaveBeenCalledTimes(1))
+      ref.current!.setContent('<p>Two</p>')
+      ref.current!.getEditor()!.commands.insertContentAt(1, 'x')
+      rerender(<Editor ref={ref} initialContent="<p>One</p>" onReady={onReady} placeholder="other" />)
+      await new Promise((r) => setTimeout(r, 20))
+      expect(onReady).toHaveBeenCalledTimes(1)
+    })
+
+    it('calls onReady only once under React StrictMode (effects run twice in development)', async () => {
+      const onReady = vi.fn()
+      render(<StrictMode><Editor initialContent="<p>One</p>" onReady={onReady} /></StrictMode>)
+      await waitFor(() => expect(onReady).toHaveBeenCalled())
+      await new Promise((r) => setTimeout(r, 20))
+      expect(onReady).toHaveBeenCalledTimes(1)
+    })
+
+    it('uses the latest onReady passed before the editor became ready', async () => {
+      const first = vi.fn()
+      const second = vi.fn()
+      const { rerender } = render(<Editor initialContent="<p>One</p>" onReady={first} />)
+      rerender(<Editor initialContent="<p>One</p>" onReady={second} />)
+      await waitFor(() => expect(second).toHaveBeenCalledTimes(1))
+      expect(first).not.toHaveBeenCalled()
+    })
+
+    it('isReady() is false right after mount and true by the time onReady fires', async () => {
+      const ref = createRef<EditorHandle>()
+      let readyInsideCallback: boolean | undefined
+      render(<Editor ref={ref} initialContent="<p>One</p>" onReady={() => { readyInsideCallback = ref.current!.isReady() }} />)
+      expect(ref.current!.isReady()).toBe(false)
+      await waitFor(() => expect(readyInsideCallback).toBe(true))
+    })
+
+    it('warns once when annotations or suggestions are set before the editor is ready', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      try {
+        const ref = createRef<EditorHandle>()
+        render(<Editor ref={ref} initialContent="<p>One</p>" />)
+        const early = ref.current!.setAnnotations('test', [{ id: 'x', blockId: 'a', quote: 'One' }])
+        expect(early.every((a) => a.status !== 'active')).toBe(true)
+        ref.current!.addSuggestions([{ type: 'replace', id: 's', blockId: 'a', quote: 'One', replacement: 'Two' }])
+        expect(warn).toHaveBeenCalledTimes(1)
+        expect(warn.mock.calls[0][0]).toContain('setAnnotations() was called before the editor was ready')
+
+        await waitFor(() => expect(ref.current!.isReady()).toBe(true))
+        warn.mockClear()
+        const [block] = ref.current!.getBlocks()
+        ref.current!.setAnnotations('test', [{ id: 'x', blockId: block.id, quote: 'One' }])
+        expect(warn).not.toHaveBeenCalled()
+      } finally {
+        warn.mockRestore()
+      }
+    })
   })
 
   it('renders the .cw-editor root without throwing', async () => {

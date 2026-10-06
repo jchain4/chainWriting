@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- `onReady` prop — called once when the editor has mounted and every block has its id, with the initial blocks. The ref handle is usable inside it, so hosts no longer need to poll `isReady()` before calling `setAnnotations()`/`addSuggestions()`.
+- A one-time `console.warn` when `setAnnotations()` or `addSuggestions()` is called before the editor is ready, instead of silently doing nothing.
+
+### Fixed
+- `isReady()` returned `true` slightly before block ids were assigned (between the editor instance being created and Tiptap's `create` event), so annotations or suggestions set at that moment couldn't find their blocks. It now turns `true` at the same moment `onReady` fires.
+
 ## [0.4.0] - 2026-10-05
 
 ### Added

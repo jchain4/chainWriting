@@ -73,6 +73,13 @@ export interface EditorProps {
    */
   onImageUpload?: (file: File) => Promise<string>
   /**
+   * Called once, when the editor has mounted and every block has its id —
+   * the earliest moment setAnnotations()/addSuggestions() can find blocks.
+   * Receives the initial blocks (same as getBlocks()). The ref handle is
+   * already usable inside this callback.
+   */
+  onReady?: (blocks: Block[]) => void
+  /**
    * Called after each edit with the ids of the blocks (paragraphs, headings,
    * images…) that were added, changed or removed — so the host can re-analyze
    * just those blocks instead of the whole document. Not called for edits
@@ -125,7 +132,11 @@ export interface EditorHandle {
   setContent: (content: Content, options?: { emitUpdate?: boolean }) => boolean
   /** Clear the whole document. */
   clear: () => boolean
-  /** True once the underlying Tiptap editor has mounted. */
+  /**
+   * True once the editor has mounted and every block has its id — the same
+   * moment `onReady` fires. Before that, setAnnotations()/addSuggestions()
+   * can't find blocks.
+   */
   isReady: () => boolean
   /** Escape hatch: the raw Tiptap editor instance. `null` until mounted. */
   getEditor: () => TiptapEditor | null
@@ -727,6 +738,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   onBlur,
   onImageUpload,
   onBlocksChange,
+  onReady,
   onAnnotationClick,
   onAnnotationHover,
   onAnnotationStatusChange,
@@ -755,6 +767,13 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   annotationHandlersRef.current = { onAnnotationClick, onAnnotationHover, onAnnotationStatusChange }
   const suggestionHandlersRef = useRef({ onSuggestionAccept, onSuggestionReject, onSuggestionStatusChange })
   suggestionHandlersRef.current = { onSuggestionAccept, onSuggestionReject, onSuggestionStatusChange }
+  const onReadyRef = useRef(onReady)
+  onReadyRef.current = onReady
+  // Tiptap emits 'create' (where BlockId assigns the initial ids) on a timeout
+  // after the editor instance exists, so "mounted" and "ready" are distinct.
+  const [createdEditor, setCreatedEditor] = useState<TiptapEditor | null>(null)
+  const readyFiredRef = useRef(false)
+  const warnedNotReadyRef = useRef(false)
   const instanceId = useId()
   const slashListboxId = `cw-slash-${instanceId}`
 
@@ -981,6 +1000,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
       scrollToCursor(editor)
       onSelectionUpdate?.(editor)
     },
+    onCreate: ({ editor }) => { setCreatedEditor(editor) },
     onFocus: ({ editor, event }) => { onFocus?.(editor, event) },
     onBlur: ({ editor, event }) => { onBlur?.(editor, event) },
   })
@@ -1076,29 +1096,56 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     if (initialContent) onChange?.(initialContent)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const readBlocks = useCallback((): Block[] => {
+    if (!editor) return []
+    // Honor a host-reconfigured BlockId (custom `types`) passed via `extensions`.
+    const blockId = editor.extensionManager.extensions.find((e) => e.name === 'blockId')
+    return getBlocks(editor.state.doc, (blockId?.options as BlockIdOptions | undefined)?.types)
+  }, [editor])
+
+  // Tied to the instance, so a replaced editor isn't ready until it's created too.
+  const ready = !!editor && createdEditor === editor
+
+  // Calling these before ready silently does nothing (or finds no block ids),
+  // which is easy to miss — warn once per editor, pointing at onReady.
+  const warnIfNotReady = useCallback((method: string) => {
+    if (ready || warnedNotReadyRef.current) return
+    warnedNotReadyRef.current = true
+    console.warn(`chain-writing: ${method}() was called before the editor was ready, so it may have had no effect. Wait for the onReady callback (or isReady()) first.`)
+  }, [ready])
+
+  // An effect, not the onCreate callback itself: it runs after React has
+  // committed the ref handle, so the host can use it inside onReady.
+  useEffect(() => {
+    if (!ready || readyFiredRef.current) return
+    readyFiredRef.current = true
+    onReadyRef.current?.(readBlocks())
+  }, [ready, readBlocks])
+
   useImperativeHandle(ref, () => ({
     focus: () => { editor?.chain().focus().run() },
     getHTML: () => editor?.getHTML() ?? '',
     getJSON: () => editor?.getJSON() ?? { type: 'doc', content: [] },
     setContent: (content, options) => editor?.commands.setContent(content, options) ?? false,
     clear: () => editor?.commands.clearContent(true) ?? false,
-    isReady: () => !!editor,
+    isReady: () => ready,
     getEditor: () => editor,
-    getBlocks: () => {
-      if (!editor) return []
-      // Honor a host-reconfigured BlockId (custom `types`) passed via `extensions`.
-      const blockId = editor.extensionManager.extensions.find((e) => e.name === 'blockId')
-      return getBlocks(editor.state.doc, (blockId?.options as BlockIdOptions | undefined)?.types)
+    getBlocks: readBlocks,
+    setAnnotations: (layer, annotations) => {
+      warnIfNotReady('setAnnotations')
+      return editor ? setAnnotations(editor, layer, annotations) : []
     },
-    setAnnotations: (layer, annotations) => editor ? setAnnotations(editor, layer, annotations) : [],
     clearAnnotations: (layer) => { if (editor) clearAnnotations(editor, layer) },
     getAnnotations: (layer) => editor ? getAnnotations(editor, layer) : [],
-    addSuggestions: (suggestions) => editor ? addSuggestions(editor, suggestions) : [],
+    addSuggestions: (suggestions) => {
+      warnIfNotReady('addSuggestions')
+      return editor ? addSuggestions(editor, suggestions) : []
+    },
     removeSuggestions: (ids) => { if (editor) removeSuggestions(editor, ids) },
     getSuggestions: () => editor ? getSuggestions(editor) : [],
     acceptSuggestion: (id) => !!editor && acceptSuggestion(editor, id),
     rejectSuggestion: (id) => !!editor && rejectSuggestion(editor, id),
-  }), [editor])
+  }), [editor, ready, readBlocks, warnIfNotReady])
 
   return (
     <div className={`cw-editor${className ? ` ${className}` : ''}`}>
