@@ -929,6 +929,8 @@ describe('Editor', () => {
       // Tokens have zero specificity, so any host selector overrides them.
       expect(css).toContain(':where(.cw-editor) {\n  --cw-bubble-bg:')
       expect(css).toContain(':where(.cw-editor[data-menu-theme="light"]) {')
+      // No hard-coded menu colours outside the token blocks (a host's own palette must win).
+      expect(css).not.toMatch(/\.cw-link-remove:hover \{[^}]*#/)
       // Opt-in content styles, readable column and fill.
       for (const style of ['prose', 'compact']) {
         expect(css).toMatch(new RegExp(`:where\\(\\.cw-editor\\[data-content-style="${style}"\\]\\) \\.ProseMirror p \\{`))

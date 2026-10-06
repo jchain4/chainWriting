@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-07
+
 ### Added
 - `surface` prop — how the editing area is set off from the page: `volume` (new default: an almost transparent surface with a faint relief, lifted by a soft shadow while writing), `glass` (frosted, like the bubble menu), `hairline` (a 1px line while writing), `ring` (the previous 2px focus ring) or `underline` (only a soft line under the text). All but `ring` derive their colours from the host's text colour, so they fit light and dark sites unconfigured. Tunable through new `--cw-surface-*` tokens.
 
@@ -15,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `fill` prop — stretch the editing area to its container's height, scrolling inside.
 - `menuTheme` prop — `auto` (default: matches the page, judged from its text colour), `light` or `dark` floating menus. New light palette for the menus, meeting WCAG AA contrast.
 - `onSubmit` prop — called with the current HTML on Ctrl/Cmd+Enter.
+- `--cw-bubble-danger` / `--cw-bubble-danger-bg` tokens — the colour of destructive menu actions (e.g. removing a link), previously hard-coded.
 - `luminance()` / `menuThemeFor()` helpers exported.
 - `--cw-ui-scale` token (default 1) — makes the floating menus and popovers larger or smaller.
 - `--cw-min-height` / `--cw-max-height` tokens — the editor grows with its content between them, then scrolls inside.

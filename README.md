@@ -489,7 +489,7 @@ Whatever the surface, reaching the editor with the keyboard (Tab) shows `--cw-fo
 
 ### Menu colours
 
-The floating menus and popovers are dark or light: with the default `menuTheme="auto"` they match the page — light menus over dark text (a light page), dark menus over light text (a dark page) — judged from the text colour the page gives the editor, and re-checked whenever the editor gets focus (so a host theme switch is picked up). Force either with `menuTheme="light"` or `"dark"`. Every colour is still a `--cw-bubble-*` token you can override; tokens are defined with zero specificity, so any selector of yours wins.
+The floating menus and popovers are dark or light: with the default `menuTheme="auto"` they match the page — light menus over dark text (a light page), dark menus over light text (a dark page) — judged from the text colour the page gives the editor, and re-checked whenever the editor gets focus (so a host theme switch is picked up). Force either with `menuTheme="light"` or `"dark"`. Every colour is still a `--cw-bubble-*` token you can override; tokens are defined with zero specificity, so any selector of yours wins. **If you give the menus your own colours, also set `menuTheme`** to the scheme your colours belong to (e.g. `"dark"` for a dark custom palette): in `auto`, any token you didn't override would otherwise come from the palette that matches the page, not your colours.
 
 ### Menu size
 
