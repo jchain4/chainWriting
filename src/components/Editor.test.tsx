@@ -91,6 +91,25 @@ describe('Editor', () => {
     expect(ref.current!.getAnnotations('live')[0]).toMatchObject({ status: 'active', quote: 'quXXick' })
   })
 
+  it('focusAnnotation on the ref handle focuses the editor and selects the annotated text', async () => {
+    const restore = mockSelectionRect()
+    try {
+      const { ref, container } = await renderReadyEditor({ initialContent: '<p data-block-id="a">The quick fox</p>' })
+      ref.current!.setAnnotations('test', [{ id: 'x', blockId: 'a', quote: 'quick' }])
+      expect(ref.current!.focusAnnotation('test', 'x')).toBe(true)
+      expect(container.querySelector('.ProseMirror')).toHaveFocus()
+      const { from, to } = ref.current!.getEditor()!.state.selection
+      expect(ref.current!.getEditor()!.state.doc.textBetween(from, to)).toBe('quick')
+      expect(ref.current!.focusAnnotation('test', 'missing')).toBe(false)
+    } finally {
+      // jsdom keeps focus and the document selection across tests (same
+      // document); don't leak them into the next test.
+      ;(document.activeElement as HTMLElement | null)?.blur()
+      window.getSelection()?.removeAllRanges()
+      restore()
+    }
+  })
+
   it('sets, reads and clears annotations through the ref handle', async () => {
     const { ref, container } = await renderReadyEditor({ initialContent: '<p data-block-id="a">The quick fox</p>' })
     await waitFor(() => expect(ref.current!.getBlocks()).toHaveLength(1))

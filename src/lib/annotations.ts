@@ -1,7 +1,7 @@
 import { Extension } from '@tiptap/core'
 import type { Editor as TiptapEditor } from '@tiptap/core'
-import { Plugin, PluginKey } from '@tiptap/pm/state'
-import type { EditorState } from '@tiptap/pm/state'
+import { NodeSelection, Plugin, PluginKey, TextSelection } from '@tiptap/pm/state'
+import type { EditorState, Selection } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
 import { lazyBlockIndex, mapAnchor, resolveAnchor, type AnchorRange } from './anchoring'
@@ -291,6 +291,40 @@ export function clearAnnotations(editor: TiptapEditor, layer?: string): void {
   editor.view.dispatch(editor.state.tr
     .setMeta(annotationsPluginKey, { type: 'clear', layer } satisfies Action)
     .setMeta('addToHistory', false))
+}
+
+export interface FocusAnnotationOptions {
+  /** Select the annotated text (default), or just put the cursor at its start. */
+  select?: boolean
+}
+
+/**
+ * Scrolls to an active annotation, focuses the editor and selects its text —
+ * e.g. when the user clicks an item in a side panel of issues. A whole-block
+ * annotation selects the block's text (or the node itself, for an image).
+ * Returns false, leaving the selection alone, if the annotation is unknown
+ * or stale.
+ */
+export function focusAnnotation(
+  editor: TiptapEditor,
+  layer: string,
+  id: string,
+  { select = true }: FocusAnnotationOptions = {},
+): boolean {
+  const a = annotationsPluginKey.getState(editor.state)?.layers.get(layer)?.get(id)
+  if (!a || a.status !== 'active' || a.from === null || a.to === null) return false
+  const { doc } = editor.state
+  let selection: Selection
+  if (!isWholeBlock(a)) {
+    selection = TextSelection.create(doc, a.from, select ? a.to : a.from)
+  } else if (doc.nodeAt(a.from)?.isTextblock) {
+    selection = TextSelection.create(doc, a.from + 1, select ? a.to - 1 : a.from + 1)
+  } else {
+    selection = NodeSelection.create(doc, a.from)
+  }
+  editor.view.dispatch(editor.state.tr.setSelection(selection).scrollIntoView())
+  editor.view.focus()
+  return true
 }
 
 /** Current annotations (active and stale) of `layer`, or of every layer when omitted. */

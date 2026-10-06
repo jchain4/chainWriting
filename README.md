@@ -119,6 +119,7 @@ function App() {
 | `setAnnotations(layer, annotations, options?)` | Mark text by content in a named layer, replacing that layer — see "Annotations" |
 | `clearAnnotations(layer?)` | Remove one layer's annotations, or all of them |
 | `getAnnotations(layer?)` | Current annotations (active and stale) |
+| `focusAnnotation(layer, id, options?)` | Scroll to an annotation, focus the editor and select its text — see "Annotations" |
 | `addSuggestions(suggestions)` | Propose changes, shown track-changes style — see "Suggestions" |
 | `acceptSuggestion(id)` / `rejectSuggestion(id)` | Apply or discard a suggestion |
 | `removeSuggestions(ids?)` | Withdraw suggestions silently (all when omitted) |
@@ -290,10 +291,11 @@ const results = editorRef.current!.setAnnotations('style', [
 - **While the user edits**, annotations follow their text — through typing elsewhere, Enter, and joining paragraphs (their `blockId` is updated if the text moves to another block). Typing right at the edge of a marked phrase doesn't stretch the mark.
 - **Stale**: when the marked text itself changes or disappears (e.g. the user rewrote the flagged phrase), the annotation becomes `stale` — unmarked, but kept. If the text comes back (undo, or retyped), it becomes `active` again. Both transitions are reported through `onAnnotationStatusChange`; changes caused by the host's own `setAnnotations`/`clearAnnotations` calls aren't.
 - **Layers you recompute anyway**: pass `{ whileEditing: 'track' }` — `setAnnotations('readability', list, { whileEditing: 'track' })` — and that layer's marks stretch or shrink as the user edits *inside* them, staying active with their `quote` updated to the new text, instead of turning stale and flickering until your next recompute. They still turn stale if all their text is deleted or Enter splits it across blocks. The mode sticks to the layer (later `setAnnotations` calls without options keep it) until you pass `'stale'` or clear the layer.
+- **Going to an annotation** (e.g. from a side panel of issues): `focusAnnotation(layer, id)` scrolls to it, focuses the editor and selects its text — the block's text for a whole-block annotation, the node itself for an image. Pass `{ select: false }` to just put the cursor at its start. Returns `false` (and leaves the selection alone) if the annotation is unknown or stale.
 - **Events**: `onAnnotationClick` receives every active annotation under the click (they can overlap) and never prevents normal cursor placement. `onAnnotationHover` fires once per change, with `[]` when the pointer leaves.
 - **Styling**: inline marks get `.cw-annotation` and `.cw-annotation--{kind}`; whole-block ones `.cw-annotation-block` and `.cw-annotation-block--{kind}`; plus your own `className`. Default tokens: `--cw-annotation-bg`, `--cw-annotation-decoration`, `--cw-annotation-block-border`.
 
-Outside React, the same operations are exported as `setAnnotations(editor, layer, list)`, `clearAnnotations(editor, layer?)` and `getAnnotations(editor, layer?)` over the raw Tiptap editor, plus the `Annotations` extension and the `findQuote` matcher.
+Outside React, the same operations are exported as `setAnnotations(editor, layer, list)`, `clearAnnotations(editor, layer?)`, `getAnnotations(editor, layer?)` and `focusAnnotation(editor, layer, id, options?)` over the raw Tiptap editor, plus the `Annotations` extension and the `findQuote` matcher.
 
 ## Suggestions: proposed changes the user accepts or rejects
 

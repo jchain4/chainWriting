@@ -6,9 +6,10 @@ import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
 import { UploadableImage } from './imageExtension'
+import { NodeSelection } from '@tiptap/pm/state'
 import { BlockId, getBlocks } from './blockId'
 import {
-  Annotations, clearAnnotations, findQuote, getAnnotations, setAnnotations,
+  Annotations, clearAnnotations, findQuote, focusAnnotation, getAnnotations, setAnnotations,
   type AnnotationsOptions, type ResolvedAnnotation,
 } from './annotations'
 
@@ -523,6 +524,89 @@ describe("whileEditing: 'track'", () => {
     setAnnotations(editor, 'live', [{ id: 'x', blockId: 'a' }], { whileEditing: 'track' })
     editor.commands.insertContentAt(QUICK + 2, 'XX')
     expect(only(editor, 'live')).toMatchObject({ status: 'active', quote: undefined })
+  })
+})
+
+describe('focusAnnotation', () => {
+  /** Captures whether each dispatched transaction asked to scroll into view. */
+  function trackScrolls(editor: TiptapEditor) {
+    const scrolls: boolean[] = []
+    editor.on('transaction', ({ transaction }) => { scrolls.push(transaction.scrolledIntoView) })
+    return scrolls
+  }
+
+  it('selects the annotated text and scrolls to it', async () => {
+    const editor = await makeEditor(PARAGRAPHS)
+    const [a] = setAnnotations(editor, 'test', [{ id: 'x', blockId: 'b', quote: 'over the' }])
+    const scrolls = trackScrolls(editor)
+    expect(focusAnnotation(editor, 'test', 'x')).toBe(true)
+    const { from, to } = editor.state.selection
+    expect([from, to]).toEqual([a.from, a.to])
+    expect(editor.state.doc.textBetween(from, to)).toBe('over the')
+    expect(scrolls).toEqual([true])
+  })
+
+  it('with select: false, puts the cursor at the start of the annotation', async () => {
+    const editor = await makeEditor(PARAGRAPHS)
+    const [a] = setAnnotations(editor, 'test', [{ id: 'x', blockId: 'b', quote: 'over' }])
+    focusAnnotation(editor, 'test', 'x', { select: false })
+    expect(editor.state.selection.empty).toBe(true)
+    expect(editor.state.selection.from).toBe(a.from)
+  })
+
+  it('selects the text of a whole-block annotation, and the node itself for an image', async () => {
+    const editor = await makeEditor(
+      '<p data-block-id="p">Para</p><ul><li><p data-block-id="li">Item</p></li></ul><img data-block-id="img" src="a.png"><p>End</p>',
+    )
+    setAnnotations(editor, 'test', [{ id: 'p', blockId: 'p' }, { id: 'li', blockId: 'li' }, { id: 'img', blockId: 'img' }])
+
+    focusAnnotation(editor, 'test', 'p')
+    expect(editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to)).toBe('Para')
+    focusAnnotation(editor, 'test', 'li')
+    expect(editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to)).toBe('Item')
+    focusAnnotation(editor, 'test', 'li', { select: false })
+    expect(editor.state.selection.empty).toBe(true)
+    expect(editor.state.selection.$from.parent.textContent).toBe('Item')
+
+    focusAnnotation(editor, 'test', 'img')
+    expect(editor.state.selection).toBeInstanceOf(NodeSelection)
+    expect((editor.state.selection as NodeSelection).node.type.name).toBe('image')
+  })
+
+  it('selects an empty block without failing', async () => {
+    const editor = await makeEditor('<p data-block-id="a">One</p><p data-block-id="empty"></p><p>End</p>')
+    setAnnotations(editor, 'test', [{ id: 'x', blockId: 'empty' }])
+    expect(focusAnnotation(editor, 'test', 'x')).toBe(true)
+    expect(editor.state.selection.empty).toBe(true)
+  })
+
+  it('goes to where the annotation is now, after edits', async () => {
+    const editor = await makeEditor(PARAGRAPHS)
+    setAnnotations(editor, 'test', [{ id: 'x', blockId: 'b', quote: 'dog' }])
+    editor.commands.insertContentAt(1, 'Lots of new text. ')
+    focusAnnotation(editor, 'test', 'x')
+    expect(editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to)).toBe('dog')
+  })
+
+  it('returns false and leaves the selection alone for stale, unknown or other-layer annotations', async () => {
+    const editor = await makeEditor(PARAGRAPHS)
+    setAnnotations(editor, 'test', [{ id: 'gone', blockId: 'a', quote: 'absent' }, { id: 'x', blockId: 'a', quote: 'quick' }])
+    editor.commands.setTextSelection(3)
+    const scrolls = trackScrolls(editor)
+    expect(focusAnnotation(editor, 'test', 'gone')).toBe(false)
+    expect(focusAnnotation(editor, 'test', 'nope')).toBe(false)
+    expect(focusAnnotation(editor, 'other', 'x')).toBe(false)
+    expect(editor.state.selection.from).toBe(3)
+    expect(scrolls).toEqual([])
+  })
+
+  it('does not change the document or add an undo step', async () => {
+    const editor = await makeEditor(PARAGRAPHS)
+    setAnnotations(editor, 'test', [{ id: 'x', blockId: 'a', quote: 'quick' }])
+    const html = editor.getHTML()
+    focusAnnotation(editor, 'test', 'x')
+    expect(editor.getHTML()).toBe(html)
+    expect(editor.can().undo()).toBe(false)
   })
 })
 

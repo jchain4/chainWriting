@@ -16,8 +16,8 @@ import { mergeExtensions } from '../lib/extensions'
 import { InsertionCursor } from '../lib/insertionCursor'
 import { BlockId, getBlocks, type Block, type BlockIdOptions, type BlocksChange } from '../lib/blockId'
 import {
-  Annotations, setAnnotations, clearAnnotations, getAnnotations,
-  type Annotation, type ResolvedAnnotation, type SetAnnotationsOptions,
+  Annotations, setAnnotations, clearAnnotations, getAnnotations, focusAnnotation,
+  type Annotation, type ResolvedAnnotation, type SetAnnotationsOptions, type FocusAnnotationOptions,
 } from '../lib/annotations'
 import {
   Suggestions, addSuggestions, removeSuggestions, getSuggestions, acceptSuggestion, rejectSuggestion,
@@ -160,6 +160,12 @@ export interface EditorHandle {
   clearAnnotations: (layer?: string) => void
   /** Current annotations (active and stale) of `layer`, or of every layer. */
   getAnnotations: (layer?: string) => ResolvedAnnotation[]
+  /**
+   * Scrolls to an annotation, focuses the editor and selects its text (or,
+   * with `{ select: false }`, puts the cursor at its start). False if it's
+   * unknown or stale.
+   */
+  focusAnnotation: (layer: string, id: string, options?: FocusAnnotationOptions) => boolean
   /**
    * Proposes changes, shown track-changes style until the user accepts or
    * rejects them: `{ type: 'replace', id, blockId, quote, replacement }` or
@@ -1142,6 +1148,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     },
     clearAnnotations: (layer) => { if (editor) clearAnnotations(editor, layer) },
     getAnnotations: (layer) => editor ? getAnnotations(editor, layer) : [],
+    focusAnnotation: (layer, id, options) => !!editor && focusAnnotation(editor, layer, id, options),
     addSuggestions: (suggestions) => {
       warnIfNotReady('addSuggestions')
       return editor ? addSuggestions(editor, suggestions) : []
