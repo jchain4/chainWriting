@@ -34,6 +34,20 @@ import {
 } from './icons'
 import '../editor.css'
 
+/**
+ * How the editing area is set off from the page:
+ * - `volume` (default): an almost transparent surface with a faint relief,
+ *   lifted by a soft shadow while writing.
+ * - `glass`: frosted glass, like the bubble menu — best over images or gradients.
+ * - `hairline`: a 1px line in the text colour while writing; nothing at rest.
+ * - `ring`: a 2px focus ring while writing (`--cw-focus-ring`) — the look before 0.6.
+ * - `underline`: no frame, only a soft line under the text while writing.
+ * All but `ring` derive their colours from the host page's text colour, so they
+ * fit light and dark themes alike. In all of them, reaching the editor with the
+ * keyboard (Tab) shows `--cw-focus-ring` until the user starts typing.
+ */
+export type EditorSurface = 'volume' | 'glass' | 'hairline' | 'ring' | 'underline'
+
 export interface EditorProps {
   initialContent?: string
   placeholder?: string
@@ -116,6 +130,8 @@ export interface EditorProps {
    * no effect on the live editor.
    */
   ariaLabel?: string
+  /** How the editing area is set off from the page — see EditorSurface. Default `volume`. Reactive. */
+  surface?: EditorSurface
 }
 
 export interface EditorHandle {
@@ -757,6 +773,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   onSuggestionReject,
   onSuggestionStatusChange,
   ariaLabel,
+  surface = 'volume',
 }, ref) {
   const accessibleName = ariaLabel || placeholder
   const rafRef = useRef<number | null>(null)
@@ -784,6 +801,28 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   const [createdEditor, setCreatedEditor] = useState<TiptapEditor | null>(null)
   const readyFiredRef = useRef(false)
   const warnedNotReadyRef = useRef(false)
+  // Keyboard-focus ring: shown when the editor is reached with Tab, hidden
+  // once the user types or clicks. :focus-visible can't tell these apart on a
+  // contenteditable (browsers match it on click too, since it takes text
+  // input), so the last input modality is tracked by hand.
+  const rootRef = useRef<HTMLDivElement>(null)
+  const lastInputWasKeyboardRef = useRef(false)
+  const setKeyboardFocus = useCallback((on: boolean) => {
+    rootRef.current?.toggleAttribute('data-keyboard-focus', on)
+  }, [])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Tab') lastInputWasKeyboardRef.current = true }
+    const onPointer = () => {
+      lastInputWasKeyboardRef.current = false
+      setKeyboardFocus(false)
+    }
+    document.addEventListener('keydown', onKey, true)
+    document.addEventListener('pointerdown', onPointer, true)
+    return () => {
+      document.removeEventListener('keydown', onKey, true)
+      document.removeEventListener('pointerdown', onPointer, true)
+    }
+  }, [setKeyboardFocus])
   const instanceId = useId()
   const slashListboxId = `cw-slash-${instanceId}`
 
@@ -954,6 +993,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
         return true
       },
       handleKeyDown: (view, event) => {
+        if (event.key !== 'Tab' && event.key !== 'Shift') setKeyboardFocus(false)
         if (event.key === 'Tab' && !event.shiftKey) {
           const isInList = view.state.selection.$head.parent.type.name === 'listItem'
           if (isInList) return false // StarterKit's list keymap sinks/lifts the item
@@ -1012,8 +1052,14 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
       onSelectionUpdate?.(editor)
     },
     onCreate: ({ editor }) => { setCreatedEditor(editor) },
-    onFocus: ({ editor, event }) => { onFocus?.(editor, event) },
-    onBlur: ({ editor, event }) => { onBlur?.(editor, event) },
+    onFocus: ({ editor, event }) => {
+      setKeyboardFocus(lastInputWasKeyboardRef.current)
+      onFocus?.(editor, event)
+    },
+    onBlur: ({ editor, event }) => {
+      setKeyboardFocus(false)
+      onBlur?.(editor, event)
+    },
   })
 
   const handleImageFile = useCallback((file: File, alt?: string) => {
@@ -1160,7 +1206,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   }), [editor, ready, readBlocks, warnIfNotReady])
 
   return (
-    <div className={`cw-editor${className ? ` ${className}` : ''}`}>
+    <div ref={rootRef} className={`cw-editor${className ? ` ${className}` : ''}`} data-surface={surface}>
       {editor && (
         <BubbleToolbar
           ref={bubbleToolbarRef}

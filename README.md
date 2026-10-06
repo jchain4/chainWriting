@@ -83,6 +83,7 @@ function App() {
 | `onSuggestionReject` | `(suggestion: ResolvedSuggestion) => void` | — | A suggestion was rejected — see "Suggestions" |
 | `onSuggestionStatusChange` | `(suggestions: ResolvedSuggestion[]) => void` | — | Suggestions that became `stale` or `active` again after an edit — see "Suggestions" |
 | `ariaLabel` | `string` | falls back to `placeholder` | Accessible name for the editing surface — see "Accessibility" |
+| `surface` | `'volume' \| 'glass' \| 'hairline' \| 'ring' \| 'underline'` | `'volume'` | How the editing area is set off from the page — see "Theming". Reactive |
 | `ref` | `Ref<EditorHandle>` | — | Imperative handle — see "Imperative API" |
 
 ## Imperative API
@@ -404,6 +405,24 @@ The component already includes a `'use client'` directive and sets `immediatelyR
 
 ## Theming
 
+### Surface
+
+The `surface` prop sets how the editing area stands out from the page:
+
+| `surface` | At rest | While writing |
+|-----------|---------|---------------|
+| `volume` (default) | An almost transparent surface with a faint relief | Lifts with a soft, diffuse shadow |
+| `glass` | Frosted glass, like the bubble menu — best over images or gradients | Same, slightly stronger |
+| `hairline` | Nothing | A 1px line in the text colour |
+| `ring` | Nothing | A 2px focus ring (`--cw-focus-ring`) — the look before 0.6 |
+| `underline` | Nothing | A soft line under the text |
+
+All but `ring` mix their colours from the page's own text colour, so they fit light and dark sites without configuration. Fine-tune them with `--cw-surface-radius`, `--cw-surface-bg`, `--cw-surface-bg-focus`, `--cw-surface-edge`, `--cw-surface-edge-focus`, `--cw-surface-highlight`, `--cw-surface-shadow-focus`, `--cw-surface-glass-blur` and `--cw-surface-line`. `volume` and `glass` default `--cw-editor-padding` to `10px 16px` (the others keep `3px 16px`); any value you set wins.
+
+Whatever the surface, reaching the editor with the keyboard (Tab) shows `--cw-focus-ring` until the user types or clicks, so keyboard users always see where focus is.
+
+### Tokens
+
 Override any CSS variable on `.cw-editor` or a parent selector:
 
 ```css
@@ -429,7 +448,7 @@ This section documents specific, fixed gaps — it isn't a formal WCAG conforman
 
 **Screen readers**: the editing surface exposes `role="textbox"` and `aria-multiline="true"`, with its accessible name coming from the `ariaLabel` prop (falling back to `placeholder`). Every icon/glyph-only button (bold, italic, headings, table actions, link/image popovers, etc.) has a real `aria-label` rather than relying on its visible glyph or `title`; the 8 text-formatting toggle buttons also expose `aria-pressed`. The floating toolbars are `role="toolbar"`. The `/` command menu exposes `role="listbox"`/`role="option"` with a dynamic `aria-activedescendant` on the editing surface itself, since focus stays there while you type — this is a pragmatic pattern (the same one used by several `@`-mention-style autocompletes over `contenteditable`), not a strict ARIA 1.2 `combobox`, so a strict validator may flag the `role="textbox"` + `aria-expanded` pairing even though it works well with NVDA/JAWS/VoiceOver in practice.
 
-**Color contrast & focus**: default toolbar text meets WCAG AA (≥4.5:1) against the default dark bubble background; the editing surface and every keyboard-focusable button show a visible focus ring (`--cw-focus-ring`, themeable like the rest of the tokens).
+**Color contrast & focus**: default toolbar text meets WCAG AA (≥4.5:1) against the default dark bubble background; every keyboard-focusable button shows a visible focus ring (`--cw-focus-ring`, themeable like the rest of the tokens), and so does the editing area whenever it's reached with the keyboard (Tab), until the user starts typing — whatever its `surface`.
 
 **Images**: the image-insert popover has an alt-text field (optional — an empty value correctly marks the image as decorative rather than being forced non-empty).
 

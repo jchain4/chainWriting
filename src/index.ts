@@ -18,7 +18,7 @@ export { Editor } from './components/Editor'
 // hosts that build their own image-insertion flows on top of it.
 export { UploadableImage } from './lib/imageExtension'
 export { InsertionCursor } from './lib/insertionCursor'
-export type { EditorProps, EditorHandle } from './components/Editor'
+export type { EditorProps, EditorHandle, EditorSurface } from './components/Editor'
 export {
   htmlToMarkdown,
   getText,

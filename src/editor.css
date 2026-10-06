@@ -30,7 +30,19 @@
   --cw-table-cell-selected-bg: rgba(99, 102, 241, 0.18);
 
   --cw-focus-ring: 0 0 0 2px rgba(99, 102, 241, 0.6);
-  --cw-editor-padding: 3px 16px;
+
+  /* Surfaces (the `surface` prop). Mixed from the host's text colour, so they
+     fit light and dark pages without configuration. */
+  --cw-surface-radius:          8px;
+  --cw-surface-bg:              color-mix(in srgb, currentColor 2.5%, transparent);
+  --cw-surface-bg-focus:        color-mix(in srgb, currentColor 3.5%, transparent);
+  --cw-surface-edge:            color-mix(in srgb, currentColor 6%, transparent);
+  --cw-surface-edge-focus:      color-mix(in srgb, currentColor 11%, transparent);
+  --cw-surface-highlight:       color-mix(in srgb, white 8%, transparent);
+  --cw-surface-shadow-focus:    0 1px 2px color-mix(in srgb, black 8%, transparent),
+                                0 10px 28px -12px color-mix(in srgb, black 30%, transparent);
+  --cw-surface-glass-blur:      blur(10px) saturate(1.2);
+  --cw-surface-line:            color-mix(in srgb, currentColor 16%, transparent);
 
   --cw-highlight-decoration: underline wavy rgba(234, 179, 8, 0.7);
 
@@ -43,6 +55,11 @@
   --cw-suggestion-insert-color: rgba(22, 163, 74, 0.95);
   --cw-suggestion-insert-bg:    rgba(22, 163, 74, 0.1);
 }
+
+/* Padding defaults depend on the surface (framed surfaces need more room).
+   Zero specificity, so any host override of --cw-editor-padding wins. */
+:where(.cw-editor) { --cw-editor-padding: 3px 16px; }
+:where(.cw-editor[data-surface="volume"], .cw-editor[data-surface="glass"]) { --cw-editor-padding: 10px 16px; }
 
 /* ── Shared entry animation ── */
 
@@ -381,12 +398,66 @@
   padding: var(--cw-editor-padding);
 }
 
-/* :focus-visible support on contenteditable is inconsistent across browsers
-   (notably Safari), so the plain :focus fallback trades a slightly wider
-   "ring shows on click too" for guaranteed visibility everywhere — the
-   safer default for a WCAG 2.4.7 fix. */
-.ProseMirror:focus-visible,
-.ProseMirror:focus {
+/* ── Surfaces (the `surface` prop on .cw-editor) ── */
+
+.cw-editor[data-surface] .ProseMirror {
+  transition: box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cw-editor[data-surface] .ProseMirror { transition: none; }
+}
+
+/* volume — almost transparent, a faint relief at rest, lifted while writing */
+.cw-editor[data-surface="volume"] .ProseMirror {
+  border-radius: var(--cw-surface-radius);
+  background: var(--cw-surface-bg);
+  box-shadow: inset 0 0 0 1px var(--cw-surface-edge), inset 0 1px 0 var(--cw-surface-highlight);
+}
+.cw-editor[data-surface="volume"] .ProseMirror:focus {
+  background: var(--cw-surface-bg-focus);
+  box-shadow: inset 0 0 0 1px var(--cw-surface-edge-focus), inset 0 1px 0 var(--cw-surface-highlight),
+              var(--cw-surface-shadow-focus);
+}
+
+/* glass — frosted, like the bubble menu */
+.cw-editor[data-surface="glass"] .ProseMirror {
+  border-radius: var(--cw-surface-radius);
+  background: color-mix(in srgb, currentColor 4%, transparent);
+  -webkit-backdrop-filter: var(--cw-surface-glass-blur);
+  backdrop-filter: var(--cw-surface-glass-blur);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 9%, transparent),
+              inset 0 1px 0 color-mix(in srgb, white 14%, transparent);
+}
+.cw-editor[data-surface="glass"] .ProseMirror:focus {
+  background: color-mix(in srgb, currentColor 6%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 14%, transparent),
+              inset 0 1px 0 color-mix(in srgb, white 18%, transparent),
+              var(--cw-surface-shadow-focus);
+}
+
+/* hairline — a 1px line in the text colour while writing */
+.cw-editor[data-surface="hairline"] .ProseMirror:focus {
+  box-shadow: 0 0 0 1px var(--cw-surface-line);
+}
+
+/* ring — the 2px focus ring while writing (the look before 0.6) */
+.cw-editor[data-surface="ring"] .ProseMirror:focus {
+  box-shadow: var(--cw-focus-ring);
+}
+
+/* underline — no frame, a soft line under the text while writing */
+.cw-editor[data-surface="underline"] .ProseMirror {
+  border-radius: 0;
+}
+.cw-editor[data-surface="underline"] .ProseMirror:focus {
+  box-shadow: inset 0 -1px 0 var(--cw-surface-line);
+}
+
+/* Reached with the keyboard (Tab): a clear focus ring on every surface, until
+   the user types or clicks (WCAG 2.4.7). Set from Editor.tsx, since
+   :focus-visible matches on click too for text-input elements. */
+.cw-editor[data-keyboard-focus] .ProseMirror:focus {
   box-shadow: var(--cw-focus-ring);
 }
 

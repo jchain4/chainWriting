@@ -3,7 +3,7 @@ import { fireEvent, render, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { Extension } from '@tiptap/react'
 import { PluginKey } from '@tiptap/pm/state'
-import { Editor, type EditorHandle } from './Editor'
+import { Editor, type EditorHandle, type EditorSurface } from './Editor'
 import { createHighlightPlugin, setHighlightRanges } from '../lib/highlightPlugin'
 import { BlockId } from '../lib/blockId'
 import { createEditorTools } from '../lib/agentTools'
@@ -216,6 +216,117 @@ describe('Editor', () => {
 
     expect(ref.current!.acceptSuggestion('assistant-s1')).toBe(true)
     expect(ref.current!.getBlocks()[0].text).toBe('The slow fox')
+  })
+
+  describe('surface and keyboard focus ring', () => {
+    const root = (container: HTMLElement) => container.querySelector('.cw-editor')!
+
+    /** Focuses the editor the way the browser would after Tab or a click. */
+    async function focusWith(input: 'keyboard' | 'pointer', props: Partial<React.ComponentProps<typeof Editor>> = {}) {
+      const restore = mockSelectionRect()
+      const utils = await renderReadyEditor({ initialContent: '<p>Hello</p>', ...props })
+      if (input === 'keyboard') fireEvent.keyDown(document, { key: 'Tab' })
+      else fireEvent.pointerDown(document.body)
+      utils.ref.current!.getEditor()!.commands.focus()
+      // Tiptap's focus command focuses on the next animation frame.
+      await waitFor(() => expect(document.activeElement).toBe(utils.container.querySelector('.ProseMirror')))
+      return { ...utils, restore }
+    }
+
+    function cleanupFocus(restore: () => void) {
+      // jsdom keeps focus and the document selection across tests.
+      ;(document.activeElement as HTMLElement | null)?.blur()
+      window.getSelection()?.removeAllRanges()
+      restore()
+    }
+
+    it('uses the volume surface by default', async () => {
+      const { container } = await renderReadyEditor()
+      expect(root(container)).toHaveAttribute('data-surface', 'volume')
+    })
+
+    it('applies the surface prop, and updates it live', async () => {
+      const ref = createRef<EditorHandle>()
+      const { container, rerender } = render(<Editor ref={ref} surface="glass" />)
+      expect(root(container)).toHaveAttribute('data-surface', 'glass')
+      rerender(<Editor ref={ref} surface="ring" />)
+      expect(root(container)).toHaveAttribute('data-surface', 'ring')
+    })
+
+    it('shows the keyboard focus ring when the editor is reached with Tab', async () => {
+      const { container, restore } = await focusWith('keyboard')
+      try {
+        expect(root(container)).toHaveAttribute('data-keyboard-focus')
+      } finally {
+        cleanupFocus(restore)
+      }
+    })
+
+    it('does not show it when the editor is focused by clicking', async () => {
+      const { container, restore } = await focusWith('pointer')
+      try {
+        expect(root(container)).not.toHaveAttribute('data-keyboard-focus')
+      } finally {
+        cleanupFocus(restore)
+      }
+    })
+
+    it('hides it once the user starts typing, but not on Shift or Tab alone', async () => {
+      const { container, restore } = await focusWith('keyboard')
+      try {
+        const dom = container.querySelector('.ProseMirror')!
+        fireEvent.keyDown(dom, { key: 'Shift' })
+        expect(root(container)).toHaveAttribute('data-keyboard-focus')
+        fireEvent.keyDown(dom, { key: 'a' })
+        expect(root(container)).not.toHaveAttribute('data-keyboard-focus')
+      } finally {
+        cleanupFocus(restore)
+      }
+    })
+
+    it('hides it on a click inside, and on blur', async () => {
+      const clicked = await focusWith('keyboard')
+      try {
+        fireEvent.pointerDown(clicked.container.querySelector('.ProseMirror')!)
+        expect(root(clicked.container)).not.toHaveAttribute('data-keyboard-focus')
+      } finally {
+        cleanupFocus(clicked.restore)
+      }
+      clicked.unmount()
+
+      const blurred = await focusWith('keyboard')
+      try {
+        expect(root(blurred.container)).toHaveAttribute('data-keyboard-focus')
+        blurred.ref.current!.getEditor()!.commands.blur()
+        await waitFor(() => expect(root(blurred.container)).not.toHaveAttribute('data-keyboard-focus'))
+      } finally {
+        cleanupFocus(blurred.restore)
+      }
+    })
+
+    it('stops listening for keys and pointers once unmounted', async () => {
+      const add = vi.spyOn(document, 'addEventListener')
+      const remove = vi.spyOn(document, 'removeEventListener')
+      try {
+        const { unmount } = await renderReadyEditor()
+        const added = add.mock.calls.filter(([type]) => type === 'keydown' || type === 'pointerdown')
+        unmount()
+        for (const [type, listener] of added) {
+          expect(remove.mock.calls.some(([t, l]) => t === type && l === listener)).toBe(true)
+        }
+      } finally {
+        add.mockRestore()
+        remove.mockRestore()
+      }
+    })
+
+    it('has a stylesheet rule for every surface', async () => {
+      // ?raw: the stylesheet's source text (plain CSS imports are stubbed in tests).
+      const css = (await import('../editor.css?raw')).default
+      const surfaces: EditorSurface[] = ['volume', 'glass', 'hairline', 'ring', 'underline']
+      for (const surface of surfaces) expect(css).toContain(`[data-surface="${surface}"]`)
+      expect(css).toContain('.cw-editor[data-keyboard-focus] .ProseMirror:focus')
+    })
   })
 
   describe('onReady / isReady', () => {

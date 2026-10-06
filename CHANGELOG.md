@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- `surface` prop — how the editing area is set off from the page: `volume` (new default: an almost transparent surface with a faint relief, lifted by a soft shadow while writing), `glass` (frosted, like the bubble menu), `hairline` (a 1px line while writing), `ring` (the previous 2px focus ring) or `underline` (only a soft line under the text). All but `ring` derive their colours from the host's text colour, so they fit light and dark sites unconfigured. Tunable through new `--cw-surface-*` tokens.
+
+### Changed
+- The editor no longer shows a 2px focus ring the whole time it's being written in. The default look is now the `volume` surface; pass `surface="ring"` to keep the previous look. `--cw-focus-ring` is still shown, on every surface, when the editor is reached with the keyboard (Tab), until the user types or clicks — so keyboard focus stays visible (WCAG 2.4.7).
+- `volume` and `glass` default `--cw-editor-padding` to `10px 16px` (previously `3px 16px` everywhere). A value set by the host still wins.
+
 ## [0.5.0] - 2026-10-06
 
 ### Added
