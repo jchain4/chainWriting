@@ -1,8 +1,9 @@
 'use client'
 
 import { Fragment, forwardRef, useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from 'react'
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, RefObject } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
+import { getHTMLFromFragment } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Typography from '@tiptap/extension-typography'
@@ -15,6 +16,7 @@ import type { AnyExtension, Content, Editor as TiptapEditor, JSONContent } from 
 import { mergeExtensions } from '../lib/extensions'
 import { InsertionCursor } from '../lib/insertionCursor'
 import { centerVertically } from '../lib/scrolling'
+import { menuThemeFor } from '../lib/color'
 import { resolveFeatures, starterKitOptions, type EditorFeatures, type ResolvedFeatures } from '../lib/features'
 import { BlockId, getBlocks, type Block, type BlockIdOptions, type BlocksChange } from '../lib/blockId'
 import {
@@ -141,6 +143,36 @@ export interface EditorProps {
    * menus; see EditorFeatures. Read once at construction.
    */
   features?: EditorFeatures
+  /**
+   * Built-in styles for the content (headings, lists, quotes, code…):
+   * `none` (default) leaves it all to the host; `prose` suits articles;
+   * `compact` suits short texts such as comments. Reactive.
+   */
+  contentStyle?: 'none' | 'prose' | 'compact'
+  /**
+   * Width of a centred column for the text (any CSS length, e.g. `"70ch"`),
+   * while the editing surface spans its container — so a full-width editor
+   * keeps readable lines. Unset by default. Reactive.
+   */
+  contentWidth?: string
+  /**
+   * Stretch the editing area to the full height of its container (which
+   * needs a height of its own), scrolling inside when the text is longer —
+   * e.g. a full-page writing app. Off by default. Reactive.
+   */
+  fill?: boolean
+  /**
+   * Colour scheme of the floating menus and popovers: `auto` (default)
+   * matches the page — light menus over dark text, dark menus over light
+   * text — or force `light` / `dark`. Reactive.
+   */
+  menuTheme?: 'auto' | 'light' | 'dark'
+  /**
+   * Called with the current HTML when the user presses Ctrl+Enter (Cmd+Enter
+   * on Mac) — the usual "send" shortcut for comments and chat. When set, that
+   * shortcut no longer inserts a line break (Shift+Enter still does).
+   */
+  onSubmit?: (html: string) => void
 }
 
 export interface EditorHandle {
@@ -871,6 +903,11 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   ariaLabel,
   surface = 'volume',
   features,
+  contentStyle = 'none',
+  contentWidth,
+  fill = false,
+  menuTheme = 'auto',
+  onSubmit,
 }, ref) {
   const accessibleName = ariaLabel || placeholder
   const rafRef = useRef<number | null>(null)
@@ -894,6 +931,8 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   // Construction-only, like `extensions`: the features shape the schema, and
   // the menus must keep matching what the schema can actually hold.
   const [enabled] = useState(() => resolveFeatures(features))
+  const onSubmitRef = useRef(onSubmit)
+  onSubmitRef.current = onSubmit
   const onReadyRef = useRef(onReady)
   onReadyRef.current = onReady
   // Tiptap emits 'create' (where BlockId assigns the initial ids) on a timeout
@@ -1093,6 +1132,15 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
       },
       handleKeyDown: (view, event) => {
         if (event.key !== 'Tab' && event.key !== 'Shift') setKeyboardFocus(false)
+        if (
+          event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey
+          && onSubmitRef.current
+        ) {
+          // From the view, not the `editor` variable: this handler is created
+          // once, before that variable holds the editor.
+          onSubmitRef.current(getHTMLFromFragment(view.state.doc.content, view.state.schema))
+          return true
+        }
         if (event.key === 'Tab' && !event.shiftKey) {
           const isInList = view.state.selection.$head.parent.type.name === 'listItem'
           if (isInList) return false // StarterKit's list keymap sinks/lifts the item
@@ -1275,6 +1323,21 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     if (initialContent) onChange?.(initialContent)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Menu theme: set on the root (outside React's render, like the keyboard
+  // focus ring). In `auto`, judged from the text colour the page gives the
+  // editor — re-checked on focus, in case the host switched themes since.
+  const applyMenuTheme = useCallback(() => {
+    const root = rootRef.current
+    if (!root) return
+    root.dataset.menuTheme = menuTheme === 'auto' ? menuThemeFor(getComputedStyle(root).color) : menuTheme
+  }, [menuTheme])
+  useLayoutEffect(applyMenuTheme, [applyMenuTheme])
+  useEffect(() => {
+    if (!editor) return
+    editor.on('focus', applyMenuTheme)
+    return () => { editor.off('focus', applyMenuTheme) }
+  }, [editor, applyMenuTheme])
+
   const readBlocks = useCallback((ids?: string[]): Block[] => {
     if (!editor) return []
     // Honor a host-reconfigured BlockId (custom `types`) passed via `extensions`.
@@ -1328,7 +1391,15 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   }), [editor, ready, readBlocks, warnIfNotReady])
 
   return (
-    <div ref={rootRef} className={`cw-editor${className ? ` ${className}` : ''}`} data-surface={surface}>
+    <div
+      ref={rootRef}
+      className={`cw-editor${className ? ` ${className}` : ''}`}
+      data-surface={surface}
+      data-content-style={contentStyle === 'none' ? undefined : contentStyle}
+      data-content-width={contentWidth ? '' : undefined}
+      data-fill={fill ? '' : undefined}
+      style={contentWidth ? ({ '--cw-content-width': contentWidth } as CSSProperties) : undefined}
+    >
       {editor && enabled.bubbleMenu && (
         <BubbleToolbar
           ref={bubbleToolbarRef}

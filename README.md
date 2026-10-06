@@ -85,6 +85,11 @@ function App() {
 | `ariaLabel` | `string` | falls back to `placeholder` | Accessible name for the editing surface — see "Accessibility" |
 | `surface` | `'volume' \| 'glass' \| 'hairline' \| 'ring' \| 'underline'` | `'volume'` | How the editing area is set off from the page — see "Theming". Reactive |
 | `features` | `EditorFeatures` | all on | Which editing features to offer — see "Features". Read once at construction |
+| `contentStyle` | `'none' \| 'prose' \| 'compact'` | `'none'` | Built-in styles for headings, lists, quotes, code… — see "Layout & content styles". Reactive |
+| `contentWidth` | `string` (CSS length) | — | A centred, readable column for the text, e.g. `"70ch"` — see "Layout & content styles". Reactive |
+| `fill` | `boolean` | `false` | Stretch to the full height of the container and scroll inside — see "Layout & content styles". Reactive |
+| `menuTheme` | `'auto' \| 'light' \| 'dark'` | `'auto'` | Colour scheme of the floating menus — see "Theming". Reactive |
+| `onSubmit` | `(html: string) => void` | — | Called on Ctrl+Enter / Cmd+Enter (the usual "send" shortcut), which then no longer inserts a line break |
 | `ref` | `Ref<EditorHandle>` | — | Imperative handle — see "Imperative API" |
 
 ## Imperative API
@@ -174,6 +179,29 @@ Everything is on by default. Turn features off with the `features` prop to fit t
 | `bubbleMenu` | The floating formatting menu on text selection |
 
 A feature turned off is removed from the editor itself, not just hidden: its markdown shortcuts stop working (`# ` no longer makes a heading), and content of that kind is converted when it's pasted or loaded — a heading arrives as a paragraph, a list as its items, a table as its cells' text, a link as plain text; images are dropped. Bold, italic, underline and strikethrough are always available. Like `extensions`, `features` is read once, when the editor is created. If you also pass your own `StarterKit` through `extensions`, it replaces the built-in one, so configure those parts of it yourself.
+
+### Layout & content styles
+
+All of these are off by default, so the editor fits anywhere — an article page, a comment box, a chat input:
+
+- **`contentStyle="prose"`** styles headings, paragraphs, lists, quotes, code and rules for long-form writing; **`"compact"`** does the same with tight spacing and small headings, for comments and notes. Both take their colours from the page's text colour. With the default `"none"`, the content is entirely yours to style. The built-in styles have low specificity, so any rule of yours adjusts them.
+- **`contentWidth="70ch"`** keeps the text in a centred column of that width while the editing surface spans its container — a full-width editor without endless lines. On narrow screens the column simply fills the width.
+- **`fill`** stretches the editing area to the full height of its container (give the container a height), scrolling inside when the text is longer; clicking the empty space below the text puts the cursor in it — for full-page writing apps.
+- **`onSubmit`** is called with the current HTML on Ctrl+Enter (Cmd+Enter on Mac). While it's set, that shortcut no longer inserts a line break; Shift+Enter still does.
+
+```tsx
+// A comment box
+<Editor
+  contentStyle="compact"
+  features={{ headings: false, tables: false, images: false, slashMenu: false }}
+  onSubmit={(html) => postComment(html)}
+/>
+
+// A full-page writing app
+<div style={{ height: '100vh' }}>
+  <Editor contentStyle="prose" contentWidth="70ch" fill />
+</div>
+```
 
 ### Height
 
@@ -458,6 +486,10 @@ The `surface` prop sets how the editing area stands out from the page:
 All but `ring` mix their colours from the page's own text colour, so they fit light and dark sites without configuration. Fine-tune them with `--cw-surface-radius`, `--cw-surface-bg`, `--cw-surface-bg-focus`, `--cw-surface-edge`, `--cw-surface-edge-focus`, `--cw-surface-highlight`, `--cw-surface-shadow-focus`, `--cw-surface-glass-blur` and `--cw-surface-line`. `volume` and `glass` default `--cw-editor-padding` to `10px 16px` (the others keep `3px 16px`); any value you set wins.
 
 Whatever the surface, reaching the editor with the keyboard (Tab) shows `--cw-focus-ring` until the user types or clicks, so keyboard users always see where focus is.
+
+### Menu colours
+
+The floating menus and popovers are dark or light: with the default `menuTheme="auto"` they match the page — light menus over dark text (a light page), dark menus over light text (a dark page) — judged from the text colour the page gives the editor, and re-checked whenever the editor gets focus (so a host theme switch is picked up). Force either with `menuTheme="light"` or `"dark"`. Every colour is still a `--cw-bubble-*` token you can override; tokens are defined with zero specificity, so any selector of yours wins.
 
 ### Menu size
 

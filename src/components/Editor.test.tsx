@@ -418,6 +418,151 @@ describe('Editor', () => {
     })
   })
 
+  describe('opt-in options', () => {
+    const root = (container: HTMLElement) => container.querySelector('.cw-editor') as HTMLElement
+
+    it('turns none of them on by default', async () => {
+      const { container } = await renderReadyEditor()
+      expect(root(container)).not.toHaveAttribute('data-content-style')
+      expect(root(container)).not.toHaveAttribute('data-content-width')
+      expect(root(container)).not.toHaveAttribute('data-fill')
+      expect(root(container).style.getPropertyValue('--cw-content-width')).toBe('')
+    })
+
+    it('contentStyle applies prose or compact styles, and updates live', async () => {
+      const ref = createRef<EditorHandle>()
+      const { container, rerender } = render(<Editor ref={ref} contentStyle="prose" />)
+      expect(root(container)).toHaveAttribute('data-content-style', 'prose')
+      rerender(<Editor ref={ref} contentStyle="compact" />)
+      expect(root(container)).toHaveAttribute('data-content-style', 'compact')
+      rerender(<Editor ref={ref} contentStyle="none" />)
+      expect(root(container)).not.toHaveAttribute('data-content-style')
+    })
+
+    it('contentWidth sets a centred column of that width, and can be removed', async () => {
+      const ref = createRef<EditorHandle>()
+      const { container, rerender } = render(<Editor ref={ref} contentWidth="70ch" />)
+      expect(root(container)).toHaveAttribute('data-content-width')
+      expect(root(container).style.getPropertyValue('--cw-content-width')).toBe('70ch')
+      rerender(<Editor ref={ref} />)
+      expect(root(container)).not.toHaveAttribute('data-content-width')
+      expect(root(container).style.getPropertyValue('--cw-content-width')).toBe('')
+    })
+
+    it('fill stretches the editor to its container', async () => {
+      const { container } = await renderReadyEditor({ fill: true })
+      expect(root(container)).toHaveAttribute('data-fill')
+    })
+
+    describe('menuTheme', () => {
+      /** Renders the editor inside a "page" with the given text colour. */
+      async function onPage(color: string, props: Partial<React.ComponentProps<typeof Editor>> = {}) {
+        const page = document.createElement('div')
+        page.style.color = color
+        document.body.append(page)
+        const ref = createRef<EditorHandle>()
+        const utils = render(<Editor ref={ref} {...props} />, { container: page })
+        await waitFor(() => expect(ref.current?.isReady()).toBe(true))
+        return { ...utils, ref, page, theme: () => root(page).dataset.menuTheme }
+      }
+
+      it('auto (default) picks light menus on a page with dark text, dark menus with light text', async () => {
+        const light = await onPage('rgb(55, 65, 81)')
+        expect(light.theme()).toBe('light')
+        const dark = await onPage('rgb(232, 230, 227)')
+        expect(dark.theme()).toBe('dark')
+        light.page.remove(); dark.page.remove()
+      })
+
+      it('can be forced to light or dark whatever the page', async () => {
+        const forcedDark = await onPage('rgb(55, 65, 81)', { menuTheme: 'dark' })
+        expect(forcedDark.theme()).toBe('dark')
+        const forcedLight = await onPage('rgb(232, 230, 227)', { menuTheme: 'light' })
+        expect(forcedLight.theme()).toBe('light')
+        forcedDark.page.remove(); forcedLight.page.remove()
+      })
+
+      it('follows a change of the prop', async () => {
+        const { rerender, ref, page, theme } = await onPage('rgb(55, 65, 81)', { menuTheme: 'dark' })
+        rerender(<Editor ref={ref} menuTheme="auto" />)
+        expect(theme()).toBe('light')
+        page.remove()
+      })
+
+      it('re-checks the page on focus, in case the host switched themes', async () => {
+        const { ref, page, theme } = await onPage('rgb(55, 65, 81)')
+        expect(theme()).toBe('light')
+        page.style.color = 'rgb(240, 240, 240)'
+        const editor = ref.current!.getEditor()!
+        editor.commands.focus()
+        await waitFor(() => expect(theme()).toBe('dark'))
+        ;(document.activeElement as HTMLElement | null)?.blur()
+        page.remove()
+      })
+    })
+
+    describe('onSubmit (Ctrl/Cmd+Enter)', () => {
+      const press = (dom: Element, init: KeyboardEventInit) => {
+        const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...init })
+        dom.dispatchEvent(event)
+        return event
+      }
+
+      it('submits the current HTML on Ctrl+Enter and Cmd+Enter, without adding a line', async () => {
+        const onSubmit = vi.fn()
+        const { ref } = await renderReadyEditor({ initialContent: '<p>Nice post</p>', onSubmit })
+        const editor = ref.current!.getEditor()!
+        editor.commands.setTextSelection(10)
+        const before = editor.getHTML()
+        expect(press(editor.view.dom, { ctrlKey: true }).defaultPrevented).toBe(true)
+        expect(press(editor.view.dom, { metaKey: true }).defaultPrevented).toBe(true)
+        expect(onSubmit).toHaveBeenCalledTimes(2)
+        expect(onSubmit).toHaveBeenLastCalledWith(before)
+        expect(editor.getHTML()).toBe(before)
+      })
+
+      it('submits what is in the editor now, not what it started with', async () => {
+        const onSubmit = vi.fn()
+        const { ref } = await renderReadyEditor({ initialContent: '<p>Draft</p>', onSubmit })
+        const editor = ref.current!.getEditor()!
+        editor.commands.insertContentAt(6, ' v2')
+        press(editor.view.dom, { ctrlKey: true })
+        expect(onSubmit.mock.lastCall![0]).toContain('Draft v2')
+      })
+
+      it('leaves Shift+Enter, Alt+Enter and plain Enter alone', async () => {
+        const onSubmit = vi.fn()
+        const { ref } = await renderReadyEditor({ initialContent: '<p>Hi</p>', onSubmit })
+        const dom = ref.current!.getEditor()!.view.dom
+        press(dom, { ctrlKey: true, shiftKey: true })
+        press(dom, { ctrlKey: true, altKey: true })
+        press(dom, {})
+        press(dom, { shiftKey: true })
+        expect(onSubmit).not.toHaveBeenCalled()
+      })
+
+      it('keeps the default Ctrl+Enter behaviour (a line break) without onSubmit', async () => {
+        const { ref } = await renderReadyEditor({ initialContent: '<p>Hi</p>' })
+        const editor = ref.current!.getEditor()!
+        editor.commands.setTextSelection(3)
+        press(editor.view.dom, { ctrlKey: true })
+        expect(editor.getHTML()).toContain('<br>')
+      })
+
+      it('uses the latest callback', async () => {
+        const first = vi.fn()
+        const second = vi.fn()
+        const ref = createRef<EditorHandle>()
+        const { rerender } = render(<Editor ref={ref} onSubmit={first} />)
+        await waitFor(() => expect(ref.current?.isReady()).toBe(true))
+        rerender(<Editor ref={ref} onSubmit={second} />)
+        press(ref.current!.getEditor()!.view.dom, { ctrlKey: true })
+        expect(first).not.toHaveBeenCalled()
+        expect(second).toHaveBeenCalledTimes(1)
+      })
+    })
+  })
+
   describe('Ctrl+K', () => {
     const ctrlK = () => {
       const event = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true, cancelable: true })
@@ -781,6 +926,15 @@ describe('Editor', () => {
       expect(forced).toMatch(/\.cw-editor \.ProseMirror:focus \{\s*outline: 2px solid Highlight;/)
       expect(forced).toMatch(/\.cw-bubble-menu button:focus-visible,[^{]*\{\s*outline: 2px solid Highlight;/)
       expect(forced).toContain('.cw-slash-menu button.is-active')
+      // Tokens have zero specificity, so any host selector overrides them.
+      expect(css).toContain(':where(.cw-editor) {\n  --cw-bubble-bg:')
+      expect(css).toContain(':where(.cw-editor[data-menu-theme="light"]) {')
+      // Opt-in content styles, readable column and fill.
+      for (const style of ['prose', 'compact']) {
+        expect(css).toMatch(new RegExp(`:where\\(\\.cw-editor\\[data-content-style="${style}"\\]\\) \\.ProseMirror p \\{`))
+      }
+      expect(css).toMatch(/\.cw-editor\[data-content-width\] \.ProseMirror \{\s*padding-inline: max\(1rem, calc\(\(100% - var\(--cw-content-width\)\) \/ 2\)\);/)
+      expect(css).toMatch(/\.cw-editor\[data-fill\] \.ProseMirror \{\s*flex: 1;/)
       // Height limits for constrained inputs such as a comment box.
       expect(css).toContain('min-height: var(--cw-min-height, auto)')
       expect(css).toContain('max-height: var(--cw-max-height, none)')

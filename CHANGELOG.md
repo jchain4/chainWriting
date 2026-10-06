@@ -10,12 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `surface` prop — how the editing area is set off from the page: `volume` (new default: an almost transparent surface with a faint relief, lifted by a soft shadow while writing), `glass` (frosted, like the bubble menu), `hairline` (a 1px line while writing), `ring` (the previous 2px focus ring) or `underline` (only a soft line under the text). All but `ring` derive their colours from the host's text colour, so they fit light and dark sites unconfigured. Tunable through new `--cw-surface-*` tokens.
 
 - `features` prop — turn off headings, block quotes, lists, code blocks, horizontal rules, links, images, tables, the `/` menu or the bubble menu, e.g. for a comment box. A feature turned off is removed from the editor itself (its shortcuts stop working and pasted or loaded content of that kind is converted), along with its buttons in the bubble and `/` menus. Read once at construction. All on by default.
+- `contentStyle` prop — built-in content styles: `prose` (articles) or `compact` (comments, notes); `none` (default) leaves styling to the host. Colours follow the page's text colour; low specificity, so host rules adjust them.
+- `contentWidth` prop — a centred, readable text column of the given width while the surface spans its container.
+- `fill` prop — stretch the editing area to its container's height, scrolling inside.
+- `menuTheme` prop — `auto` (default: matches the page, judged from its text colour), `light` or `dark` floating menus. New light palette for the menus, meeting WCAG AA contrast.
+- `onSubmit` prop — called with the current HTML on Ctrl/Cmd+Enter.
+- `luminance()` / `menuThemeFor()` helpers exported.
 - `--cw-ui-scale` token (default 1) — makes the floating menus and popovers larger or smaller.
 - `--cw-min-height` / `--cw-max-height` tokens — the editor grows with its content between them, then scrolls inside.
 
 ### Changed
 - The editor no longer shows a 2px focus ring the whole time it's being written in. The default look is now the `volume` surface; pass `surface="ring"` to keep the previous look. `--cw-focus-ring` is still shown, on every surface, when the editor is reached with the keyboard (Tab), until the user types or clicks — so keyboard focus stays visible (WCAG 2.4.7).
 - `volume` and `glass` default `--cw-editor-padding` to `10px 16px` (previously `3px 16px` everywhere). A value set by the host still wins.
+- Floating menus are now light on light pages by default (`menuTheme="auto"`); they were always dark. Pass `menuTheme="dark"` for the previous look.
+- Token defaults are now declared with zero specificity (`:where(.cw-editor)`), so any host selector overrides them regardless of stylesheet order.
 - `--cw-table-border` and `--cw-table-header-bg` now default to the host's text colour mixed in (16% and 5%), instead of white-alpha values that were only visible on dark pages.
 
 ### Fixed

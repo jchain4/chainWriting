@@ -6,9 +6,10 @@
   .cw-editor or any ancestor to re-theme without touching library code.
 */
 
-/* ── Token defaults ── */
+/* ── Token defaults ──
+   Zero specificity (:where), so any host selector that sets a token wins. */
 
-.cw-editor {
+:where(.cw-editor) {
   --cw-bubble-bg:          rgba(15, 15, 17, 0.88);
   --cw-bubble-border:      rgba(255, 255, 255, 0.1);
   --cw-bubble-shadow:      0 8px 28px rgba(0, 0, 0, 0.45),
@@ -55,6 +56,27 @@
   --cw-suggestion-delete-bg:    rgba(220, 38, 38, 0.08);
   --cw-suggestion-insert-color: rgba(22, 163, 74, 0.95);
   --cw-suggestion-insert-bg:    rgba(22, 163, 74, 0.1);
+}
+
+/* ── Light menus (menuTheme="light", or "auto" on a light page) ── */
+
+:where(.cw-editor[data-menu-theme="light"]) {
+  --cw-bubble-bg:          rgba(255, 255, 255, 0.92);
+  --cw-bubble-border:      rgba(0, 0, 0, 0.08);
+  --cw-bubble-shadow:      0 8px 28px rgba(0, 0, 0, 0.12),
+                           0 2px 6px  rgba(0, 0, 0, 0.08),
+                           inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  --cw-bubble-text:        rgba(0, 0, 0, 0.6); /* ≥4.5:1 against --cw-bubble-bg (WCAG AA) */
+  --cw-bubble-text-hover:  rgba(0, 0, 0, 0.9);
+  --cw-bubble-text-active: #111114;
+  --cw-bubble-hover-bg:    rgba(0, 0, 0, 0.05);
+  --cw-bubble-active-bg:   rgba(0, 0, 0, 0.09);
+  --cw-bubble-divider:     rgba(0, 0, 0, 0.1);
+}
+
+.cw-editor[data-menu-theme="light"] .cw-link-remove:hover {
+  color: #dc2626;
+  background: rgba(220, 38, 38, 0.08);
 }
 
 /* ── Floating UI unit ──
@@ -681,4 +703,106 @@
     outline: 2px solid Highlight;
     outline-offset: -2px;
   }
+}
+
+/* ── Content styles (contentStyle prop) ──
+   Off by default ("none"): the host styles the content. "prose" suits
+   articles, "compact" short texts such as comments. Colours are mixed from
+   the text colour, so both fit light and dark pages. Low specificity
+   (:where), so the host can adjust any of it — and so the readable column
+   below can still centre each block. */
+
+:where(.cw-editor[data-content-style]) .ProseMirror > :first-child { margin-top: 0; }
+:where(.cw-editor[data-content-style]) .ProseMirror > :last-child { margin-bottom: 0; }
+
+:where(.cw-editor[data-content-style]) .ProseMirror :is(h1, h2, h3) {
+  font-weight: 700;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+
+:where(.cw-editor[data-content-style]) .ProseMirror blockquote {
+  border-left: 3px solid color-mix(in srgb, currentColor 25%, transparent);
+  color: color-mix(in srgb, currentColor 80%, transparent);
+}
+
+:where(.cw-editor[data-content-style]) .ProseMirror code {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.88em;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+
+:where(.cw-editor[data-content-style]) .ProseMirror pre {
+  background: color-mix(in srgb, currentColor 6%, transparent);
+  border-radius: 6px;
+  overflow-x: auto;
+}
+
+:where(.cw-editor[data-content-style]) .ProseMirror pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.88em;
+}
+
+:where(.cw-editor[data-content-style]) .ProseMirror hr {
+  border: none;
+  border-top: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+}
+
+/* prose — articles and long-form writing */
+:where(.cw-editor[data-content-style="prose"]) .ProseMirror p { margin: 0 0 0.85em; }
+:where(.cw-editor[data-content-style="prose"]) .ProseMirror h1 { font-size: 2em; margin: 1.4em 0 0.5em; letter-spacing: -0.02em; }
+:where(.cw-editor[data-content-style="prose"]) .ProseMirror h2 { font-size: 1.5em; margin: 1.4em 0 0.5em; letter-spacing: -0.01em; }
+:where(.cw-editor[data-content-style="prose"]) .ProseMirror h3 { font-size: 1.2em; margin: 1.2em 0 0.4em; }
+:where(.cw-editor[data-content-style="prose"]) .ProseMirror :is(ul, ol) { padding-left: 1.5em; margin: 0 0 0.85em; }
+:where(.cw-editor[data-content-style="prose"]) .ProseMirror li > p { margin: 0.2em 0; }
+:where(.cw-editor[data-content-style="prose"]) .ProseMirror blockquote { margin: 1.2em 0; padding: 0.1em 0 0.1em 1.1em; font-style: italic; }
+:where(.cw-editor[data-content-style="prose"]) .ProseMirror pre { margin: 1.2em 0; padding: 0.9em 1.1em; }
+:where(.cw-editor[data-content-style="prose"]) .ProseMirror hr { margin: 2em 0; }
+
+/* compact — comments, chat, short notes */
+:where(.cw-editor[data-content-style="compact"]) .ProseMirror p { margin: 0 0 0.4em; }
+:where(.cw-editor[data-content-style="compact"]) .ProseMirror h1 { font-size: 1.2em; margin: 0.6em 0 0.25em; }
+:where(.cw-editor[data-content-style="compact"]) .ProseMirror h2 { font-size: 1.1em; margin: 0.6em 0 0.25em; }
+:where(.cw-editor[data-content-style="compact"]) .ProseMirror h3 { font-size: 1em; margin: 0.5em 0 0.2em; }
+:where(.cw-editor[data-content-style="compact"]) .ProseMirror :is(ul, ol) { padding-left: 1.25em; margin: 0 0 0.4em; }
+:where(.cw-editor[data-content-style="compact"]) .ProseMirror li > p { margin: 0; }
+:where(.cw-editor[data-content-style="compact"]) .ProseMirror blockquote { margin: 0.4em 0; padding: 0 0 0 0.75em; }
+:where(.cw-editor[data-content-style="compact"]) .ProseMirror pre { margin: 0.4em 0; padding: 0.5em 0.75em; }
+:where(.cw-editor[data-content-style="compact"]) .ProseMirror hr { margin: 0.75em 0; }
+
+/* ── Readable column (contentWidth prop) ──
+   The editing surface spans its container; the text sits in a centred
+   column of this width, so a full-width editor doesn't get endless lines.
+   Done with side padding on the editing area itself — resolved once, in its
+   font — so every block shares the same column edges (a per-block max-width
+   in ch would make larger-type headings wider than paragraphs), and the
+   whole width stays clickable. */
+
+.cw-editor[data-content-width] .ProseMirror {
+  padding-inline: max(1rem, calc((100% - var(--cw-content-width)) / 2));
+}
+
+/* ── Fill the container's height (fill prop) ──
+   The editing area stretches to the bottom of its container — clicking the
+   empty space below the text puts the cursor in it — and scrolls inside
+   when the text is longer. */
+
+.cw-editor[data-fill] {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.cw-editor[data-fill] > div:has(> .ProseMirror) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.cw-editor[data-fill] .ProseMirror {
+  flex: 1;
 }
