@@ -230,6 +230,243 @@ describe('Editor', () => {
     expect(ref.current!.getBlocks()[0].text).toBe('The slow fox')
   })
 
+  describe('features', () => {
+    const extensionNames = (ref: React.RefObject<EditorHandle | null>) =>
+      ref.current!.getEditor()!.extensionManager.extensions.map((e) => e.name)
+    const nodes = (ref: React.RefObject<EditorHandle | null>) => Object.keys(ref.current!.getEditor()!.schema.nodes)
+    const marks = (ref: React.RefObject<EditorHandle | null>) => Object.keys(ref.current!.getEditor()!.schema.marks)
+
+    function cleanupFocus() {
+      ;(document.activeElement as HTMLElement | null)?.blur()
+      window.getSelection()?.removeAllRanges()
+    }
+
+    /** Selects some text so the bubble menu shows, and returns its button formats and divider count. */
+    async function bubbleButtons(props: Partial<React.ComponentProps<typeof Editor>>) {
+      const restore = mockSelectionRect()
+      try {
+        const { ref, container } = await renderReadyEditor({ initialContent: '<p>hello world</p>', ...props })
+        const editor = ref.current!.getEditor()!
+        editor.commands.focus()
+        await waitFor(() => expect(document.activeElement).toBe(editor.view.dom))
+        editor.commands.setTextSelection({ from: 1, to: 6 })
+        await waitFor(() => expect(container.querySelector('.cw-bubble-menu')).toBeInTheDocument())
+        const menu = container.querySelector('.cw-bubble-menu')!
+        return {
+          formats: [...menu.querySelectorAll('button')].map((b) => b.getAttribute('data-format')),
+          dividers: menu.querySelectorAll('.cw-bubble-menu__divider').length,
+          menu,
+        }
+      } finally {
+        cleanupFocus()
+        restore()
+      }
+    }
+
+    it('offers everything by default', async () => {
+      const { ref } = await renderReadyEditor()
+      expect(nodes(ref)).toEqual(expect.arrayContaining(['heading', 'blockquote', 'bulletList', 'orderedList', 'codeBlock', 'horizontalRule', 'image', 'table']))
+      expect(marks(ref)).toContain('link')
+      expect(extensionNames(ref)).toContain('slashCommand')
+      const { formats, dividers } = await bubbleButtons({})
+      expect(formats).toEqual(['bold', 'italic', 'underline', 'strike', 'h1', 'h2', 'h3', 'blockquote', 'link'])
+      expect(dividers).toBe(3)
+    })
+
+    it('removes each disabled feature from the editor itself', async () => {
+      const { ref } = await renderReadyEditor({
+        features: { headings: false, blockquote: false, lists: false, codeBlock: false, horizontalRule: false, links: false, images: false, tables: false },
+      })
+      for (const node of ['heading', 'blockquote', 'bulletList', 'orderedList', 'listItem', 'codeBlock', 'horizontalRule', 'image', 'table']) {
+        expect(nodes(ref)).not.toContain(node)
+      }
+      expect(marks(ref)).not.toContain('link')
+      expect(marks(ref)).toEqual(expect.arrayContaining(['bold', 'italic', 'underline', 'strike']))
+    })
+
+    it('converts content of a disabled kind instead of keeping it (e.g. pasted or loaded)', async () => {
+      const { ref } = await renderReadyEditor({
+        features: { headings: false, lists: false, links: false, images: false, tables: false },
+        initialContent: '<h2>Title</h2><ul><li><p>Item</p></li></ul><p><a href="https://x.y">link</a></p>'
+          + '<img src="a.png"><table><tr><td><p>Cell</p></td></tr></table>',
+      })
+      const blocks = ref.current!.getBlocks()
+      expect(blocks.map((b) => [b.type, b.text])).toEqual([['paragraph', 'Title'], ['paragraph', 'Item'], ['paragraph', 'link'], ['paragraph', 'Cell']])
+      expect(ref.current!.getHTML()).not.toMatch(/<(h2|ul|a|img|table)\b/)
+    })
+
+    it('hides the bubble menu buttons of disabled features, keeping dividers only between groups', async () => {
+      const noHeadings = await bubbleButtons({ features: { headings: false } })
+      expect(noHeadings.formats).toEqual(['bold', 'italic', 'underline', 'strike', 'blockquote', 'link'])
+      expect(noHeadings.dividers).toBe(2)
+
+      const marksOnly = await bubbleButtons({ features: { headings: false, blockquote: false, links: false } })
+      expect(marksOnly.formats).toEqual(['bold', 'italic', 'underline', 'strike'])
+      expect(marksOnly.dividers).toBe(0)
+    })
+
+    it('keeps the bubble menu keyboard navigation in step with the visible buttons', async () => {
+      const restore = mockSelectionRect()
+      try {
+        const { ref, container } = await renderReadyEditor({ initialContent: '<p>hello world</p>', features: { headings: false, links: false } })
+        const editor = ref.current!.getEditor()!
+        editor.commands.focus()
+        await waitFor(() => expect(document.activeElement).toBe(editor.view.dom))
+        editor.commands.setTextSelection({ from: 1, to: 6 })
+        await waitFor(() => expect(container.querySelector('.cw-bubble-menu')).toBeInTheDocument())
+        const buttons = () => [...container.querySelectorAll('.cw-bubble-menu button')] as HTMLElement[]
+        expect(buttons().filter((b) => b.getAttribute('tabindex') === '0')).toHaveLength(1)
+        editor.view.dom.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }))
+        await waitFor(() => expect(document.activeElement).toBe(buttons()[0]))
+        fireEvent.keyDown(buttons()[0], { key: 'End' })
+        await waitFor(() => expect(document.activeElement).toBe(buttons()[buttons().length - 1]))
+        expect(buttons()[buttons().length - 1].getAttribute('data-format')).toBe('blockquote')
+      } finally {
+        cleanupFocus()
+        restore()
+      }
+    })
+
+    it('can turn off the bubble menu and the "/" menu entirely', async () => {
+      const { ref } = await renderReadyEditor({ features: { slashMenu: false } })
+      expect(extensionNames(ref)).not.toContain('slashCommand')
+
+      const restore = mockSelectionRect()
+      try {
+        const { ref: ref2, container } = await renderReadyEditor({ initialContent: '<p>hello world</p>', features: { bubbleMenu: false } })
+        const editor = ref2.current!.getEditor()!
+        editor.commands.focus()
+        await waitFor(() => expect(document.activeElement).toBe(editor.view.dom))
+        editor.commands.setTextSelection({ from: 1, to: 6 })
+        await new Promise((r) => setTimeout(r, 50))
+        expect(container.querySelector('.cw-bubble-menu')).toBeNull()
+      } finally {
+        cleanupFocus()
+        restore()
+      }
+    })
+
+    it('drops the "/" menu when every item in it is disabled', async () => {
+      const { ref } = await renderReadyEditor({
+        features: { headings: false, lists: false, blockquote: false, links: false, images: false, tables: false },
+      })
+      expect(extensionNames(ref)).not.toContain('slashCommand')
+    })
+
+    it('lists only the enabled items in the "/" menu', async () => {
+      const { ref, container } = await renderReadyEditor({ features: { tables: false, images: false, headings: false } })
+      const editor = ref.current!.getEditor()!
+      editor.commands.focus()
+      await waitFor(() => expect(document.activeElement).toBe(editor.view.dom))
+      editor.commands.insertContent('/')
+      await waitFor(() => expect(container.querySelector('.cw-slash-menu')).toBeInTheDocument())
+      // The label is the button's own text, next to its icon (whose SVG may contain text too).
+      const labels = [...container.querySelectorAll('.cw-slash-menu button')]
+        .map((b) => [...b.childNodes].filter((n) => n.nodeType === Node.TEXT_NODE).map((n) => n.textContent).join(''))
+      expect(labels).toEqual(['Lista', 'Lista numerada', 'Cita', 'Enlace'])
+      cleanupFocus()
+    })
+
+    it('never shows the table toolbar with tables off', async () => {
+      const { container } = await renderReadyEditor({ features: { tables: false } })
+      expect(container.querySelector('.cw-table-menu')).toBeNull()
+    })
+
+    it('ignores pasted and dropped image files with images off, even with onImageUpload', async () => {
+      const onImageUpload = vi.fn(() => Promise.resolve('https://x/a.png'))
+      const { ref } = await renderReadyEditor({ onImageUpload, features: { images: false } })
+      const view = ref.current!.getEditor()!.view
+      const file = new File(['x'], 'a.png', { type: 'image/png' })
+      const paste = Object.assign(new Event('paste'), { clipboardData: { files: [file], getData: () => '' } }) as unknown as ClipboardEvent
+      const drop = Object.assign(new Event('drop'), { dataTransfer: { files: [file] }, clientX: 0, clientY: 0 }) as unknown as DragEvent
+      expect(view.someProp('handlePaste', (f) => f(view, paste, view.state.doc.slice(0, 0)))).toBeFalsy()
+      expect(view.someProp('handleDrop', (f) => f(view, drop, view.state.doc.slice(0, 0), false))).toBeFalsy()
+      expect(onImageUpload).not.toHaveBeenCalled()
+    })
+
+    it('reads features once, at construction, so the menus never offer what the editor cannot hold', async () => {
+      const restore = mockSelectionRect()
+      try {
+        const ref = createRef<EditorHandle>()
+        const { rerender, container } = render(<Editor ref={ref} initialContent="<p>hello world</p>" features={{ headings: false }} />)
+        await waitFor(() => expect(ref.current?.isReady()).toBe(true))
+        rerender(<Editor ref={ref} initialContent="<p>hello world</p>" features={{ headings: true }} />)
+        expect(nodes(ref)).not.toContain('heading')
+
+        const editor = ref.current!.getEditor()!
+        editor.commands.focus()
+        await waitFor(() => expect(document.activeElement).toBe(editor.view.dom))
+        editor.commands.setTextSelection({ from: 1, to: 6 })
+        await waitFor(() => expect(container.querySelector('.cw-bubble-menu')).toBeInTheDocument())
+        expect(container.querySelector('.cw-bubble-menu button[data-format="h1"]')).toBeNull()
+      } finally {
+        cleanupFocus()
+        restore()
+      }
+    })
+
+    it('still supports blocks, annotations and suggestions in a stripped-down comment box', async () => {
+      const { ref } = await renderReadyEditor({
+        initialContent: '<p data-block-id="c">A nice comment</p>',
+        features: { headings: false, lists: false, blockquote: false, codeBlock: false, horizontalRule: false, images: false, tables: false, slashMenu: false },
+      })
+      expect(ref.current!.getBlocks()).toEqual([expect.objectContaining({ id: 'c', text: 'A nice comment' })])
+      expect(ref.current!.setAnnotations('t', [{ id: 'a', blockId: 'c', quote: 'nice' }])[0].status).toBe('active')
+      ref.current!.addSuggestions([{ type: 'replace', id: 's', blockId: 'c', quote: 'nice', replacement: 'great' }])
+      expect(ref.current!.acceptSuggestion('s')).toBe(true)
+      expect(ref.current!.getBlocks()[0].text).toBe('A great comment')
+    })
+  })
+
+  describe('Ctrl+K', () => {
+    const ctrlK = () => {
+      const event = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true, cancelable: true })
+      document.dispatchEvent(event)
+      return event
+    }
+
+    it('is left alone for the rest of the page when no editor has focus', async () => {
+      await renderReadyEditor({ initialContent: '<p>hello</p>' })
+      expect(ctrlK().defaultPrevented).toBe(false)
+    })
+
+    it('only opens the link popover in the editor being written in', async () => {
+      const restore = mockSelectionRect()
+      try {
+        const first = await renderReadyEditor({ initialContent: '<p>first</p>' })
+        const second = await renderReadyEditor({ initialContent: '<p>second</p>' })
+        const editor = second.ref.current!.getEditor()!
+        editor.commands.focus()
+        await waitFor(() => expect(document.activeElement).toBe(editor.view.dom))
+        editor.commands.setTextSelection({ from: 1, to: 4 })
+        expect(ctrlK().defaultPrevented).toBe(true)
+        await waitFor(() => expect(second.container.querySelector('.cw-link-popover')).toBeInTheDocument())
+        expect(first.container.querySelector('.cw-link-popover')).toBeNull()
+      } finally {
+        ;(document.activeElement as HTMLElement | null)?.blur()
+        window.getSelection()?.removeAllRanges()
+        restore()
+      }
+    })
+
+    it('does nothing with links turned off', async () => {
+      const restore = mockSelectionRect()
+      try {
+        const { ref, container } = await renderReadyEditor({ initialContent: '<p>hello</p>', features: { links: false } })
+        const editor = ref.current!.getEditor()!
+        editor.commands.focus()
+        await waitFor(() => expect(document.activeElement).toBe(editor.view.dom))
+        editor.commands.setTextSelection({ from: 1, to: 4 })
+        expect(ctrlK().defaultPrevented).toBe(false)
+        expect(container.querySelector('.cw-link-popover')).toBeNull()
+      } finally {
+        ;(document.activeElement as HTMLElement | null)?.blur()
+        window.getSelection()?.removeAllRanges()
+        restore()
+      }
+    })
+  })
+
   describe('floating UI follows the text', () => {
     const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
 
@@ -489,6 +726,9 @@ describe('Editor', () => {
       // Table colours follow the page's text colour, so they show on light pages too.
       expect(css).toMatch(/--cw-table-border:\s*color-mix\(in srgb, currentColor/)
       expect(css).toMatch(/--cw-table-header-bg:\s*color-mix\(in srgb, currentColor/)
+      // Height limits for constrained inputs such as a comment box.
+      expect(css).toContain('min-height: var(--cw-min-height, auto)')
+      expect(css).toContain('max-height: var(--cw-max-height, none)')
     })
   })
 

@@ -397,6 +397,12 @@
   line-height: inherit;
   border-radius: 6px;
   padding: var(--cw-editor-padding);
+  /* Grows with its content between these, then scrolls inside — e.g. a
+     comment box: --cw-min-height: 3lh; --cw-max-height: 12rem. Unset, it
+     simply takes the height of its content. */
+  min-height: var(--cw-min-height, auto);
+  max-height: var(--cw-max-height, none);
+  overflow-y: auto;
 }
 
 /* ── Surfaces (the `surface` prop on .cw-editor) ── */

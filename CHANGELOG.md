@@ -9,6 +9,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 - `surface` prop — how the editing area is set off from the page: `volume` (new default: an almost transparent surface with a faint relief, lifted by a soft shadow while writing), `glass` (frosted, like the bubble menu), `hairline` (a 1px line while writing), `ring` (the previous 2px focus ring) or `underline` (only a soft line under the text). All but `ring` derive their colours from the host's text colour, so they fit light and dark sites unconfigured. Tunable through new `--cw-surface-*` tokens.
 
+- `features` prop — turn off headings, block quotes, lists, code blocks, horizontal rules, links, images, tables, the `/` menu or the bubble menu, e.g. for a comment box. A feature turned off is removed from the editor itself (its shortcuts stop working and pasted or loaded content of that kind is converted), along with its buttons in the bubble and `/` menus. Read once at construction. All on by default.
+- `--cw-min-height` / `--cw-max-height` tokens — the editor grows with its content between them, then scrolls inside.
+
 ### Changed
 - The editor no longer shows a 2px focus ring the whole time it's being written in. The default look is now the `volume` surface; pass `surface="ring"` to keep the previous look. `--cw-focus-ring` is still shown, on every surface, when the editor is reached with the keyboard (Tab), until the user types or clicks — so keyboard focus stays visible (WCAG 2.4.7).
 - `volume` and `glass` default `--cw-editor-padding` to `10px 16px` (previously `3px 16px` everywhere). A value set by the host still wins.
@@ -18,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Floating menus and popovers (bubble menu, table toolbar, `/` menu and its submenu, link and image popovers) could overflow the viewport — e.g. the bubble menu started 80px off-screen when selecting a word near the left edge of a phone screen. They're now kept at least 8px inside it.
 - Floating menus and popovers stayed put when the page — or any scroll container around the editor — scrolled, or the window resized, detaching from their text. They now follow it. The bubble menu hides while its selection is scrolled out of view and comes back with it; the table toolbar sticks to the top edge while a long table is partly scrolled away, and hides once it's gone.
 - Table borders and header backgrounds were invisible on light pages (see Changed).
+- Ctrl+K was caught on the whole page: it opened the link popover — and blocked the browser's or the host page's own Ctrl+K — even when the editor wasn't focused, and with several editors on a page (e.g. a list of comments) every one of them reacted. Only the focused editor handles it now.
 
 ## [0.5.0] - 2026-10-06
 

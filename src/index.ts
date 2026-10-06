@@ -19,6 +19,7 @@ export { Editor } from './components/Editor'
 export { UploadableImage } from './lib/imageExtension'
 export { InsertionCursor } from './lib/insertionCursor'
 export type { EditorProps, EditorHandle, EditorSurface } from './components/Editor'
+export type { EditorFeatures } from './lib/features'
 export {
   htmlToMarkdown,
   getText,

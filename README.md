@@ -84,6 +84,7 @@ function App() {
 | `onSuggestionStatusChange` | `(suggestions: ResolvedSuggestion[]) => void` | — | Suggestions that became `stale` or `active` again after an edit — see "Suggestions" |
 | `ariaLabel` | `string` | falls back to `placeholder` | Accessible name for the editing surface — see "Accessibility" |
 | `surface` | `'volume' \| 'glass' \| 'hairline' \| 'ring' \| 'underline'` | `'volume'` | How the editing area is set off from the page — see "Theming". Reactive |
+| `features` | `EditorFeatures` | all on | Which editing features to offer — see "Features". Read once at construction |
 | `ref` | `Ref<EditorHandle>` | — | Imperative handle — see "Imperative API" |
 
 ## Imperative API
@@ -147,6 +148,43 @@ import { MyMention } from './my-mention'
 ```
 
 `extensions` (like `initialContent`) is read once at construction — changing it after the first render has no effect on the live editor.
+
+## Features
+
+Everything is on by default. Turn features off with the `features` prop to fit the editor to a smaller job — a comment box, a chat input, a form field:
+
+```tsx
+<Editor
+  placeholder="Escribe un comentario…"
+  features={{ headings: false, lists: false, codeBlock: false, horizontalRule: false, images: false, tables: false, slashMenu: false }}
+/>
+```
+
+| Feature | What turning it off removes |
+|---------|-----------------------------|
+| `headings` | Headings, and their buttons in the bubble and `/` menus |
+| `blockquote` | Block quotes |
+| `lists` | Bulleted and numbered lists |
+| `codeBlock` | Code blocks |
+| `horizontalRule` | Horizontal rules |
+| `links` | Links, Ctrl+K and autolinking typed URLs |
+| `images` | Images — by URL, upload, paste or drop (even with `onImageUpload`) |
+| `tables` | Tables and their toolbar |
+| `slashMenu` | The `/` command menu (also dropped automatically if all its items are off) |
+| `bubbleMenu` | The floating formatting menu on text selection |
+
+A feature turned off is removed from the editor itself, not just hidden: its markdown shortcuts stop working (`# ` no longer makes a heading), and content of that kind is converted when it's pasted or loaded — a heading arrives as a paragraph, a list as its items, a table as its cells' text, a link as plain text; images are dropped. Bold, italic, underline and strikethrough are always available. Like `extensions`, `features` is read once, when the editor is created. If you also pass your own `StarterKit` through `extensions`, it replaces the built-in one, so configure those parts of it yourself.
+
+### Height
+
+By default the editor is as tall as its content. To make it grow between two heights and then scroll inside — typical for a comment box — set:
+
+```css
+.my-comment-box .cw-editor {
+  --cw-min-height: 3lh;    /* room for about three lines, even when empty */
+  --cw-max-height: 12rem;  /* then it scrolls inside */
+}
+```
 
 ## Rich content
 

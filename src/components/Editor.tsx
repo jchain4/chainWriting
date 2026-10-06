@@ -1,6 +1,6 @@
 'use client'
 
-import { forwardRef, useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, forwardRef, useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
@@ -14,6 +14,7 @@ import { TextSelection } from '@tiptap/pm/state'
 import type { AnyExtension, Content, Editor as TiptapEditor, JSONContent } from '@tiptap/react'
 import { mergeExtensions } from '../lib/extensions'
 import { InsertionCursor } from '../lib/insertionCursor'
+import { resolveFeatures, starterKitOptions, type EditorFeatures, type ResolvedFeatures } from '../lib/features'
 import { BlockId, getBlocks, type Block, type BlockIdOptions, type BlocksChange } from '../lib/blockId'
 import {
   Annotations, setAnnotations, clearAnnotations, getAnnotations, focusAnnotation,
@@ -133,6 +134,12 @@ export interface EditorProps {
   ariaLabel?: string
   /** How the editing area is set off from the page — see EditorSurface. Default `volume`. Reactive. */
   surface?: EditorSurface
+  /**
+   * Which editing features to offer — all on by default. A feature turned
+   * off is removed from the editor (shortcuts, pasting) as well as from the
+   * menus; see EditorFeatures. Read once at construction.
+   */
+  features?: EditorFeatures
 }
 
 export interface EditorHandle {
@@ -276,15 +283,51 @@ function useBubblePos(editor: TiptapEditor | null, toolbarRef: RefObject<HTMLDiv
 
 // ── Bubble toolbar ──────────────────────────────────────────────────────────
 
+interface BubbleButton {
+  label: string
+  format: string
+  active: (editor: TiptapEditor) => boolean
+  action: (editor: TiptapEditor) => void
+  title: string
+  ariaLabel: string
+}
+
+/** The bubble menu's button groups (separated by dividers), minus disabled features. */
+function bubbleGroups(features: ResolvedFeatures, onLinkClick: (editor: TiptapEditor) => void): BubbleButton[][] {
+  const groups: BubbleButton[][] = [
+    [
+      { label: 'B', format: 'bold', active: (e) => e.isActive('bold'), action: (e) => e.chain().focus().toggleBold().run(), title: 'Negrita (Ctrl+B)', ariaLabel: 'Negrita' },
+      { label: 'I', format: 'italic', active: (e) => e.isActive('italic'), action: (e) => e.chain().focus().toggleItalic().run(), title: 'Cursiva (Ctrl+I)', ariaLabel: 'Cursiva' },
+      { label: 'U', format: 'underline', active: (e) => e.isActive('underline'), action: (e) => e.chain().focus().toggleUnderline().run(), title: 'Subrayado (Ctrl+U)', ariaLabel: 'Subrayado' },
+      { label: 'S', format: 'strike', active: (e) => e.isActive('strike'), action: (e) => e.chain().focus().toggleStrike().run(), title: 'Tachado', ariaLabel: 'Tachado' },
+    ],
+    features.headings ? ([1, 2, 3] as const).map((level) => ({
+      label: `H${level}`, format: `h${level}`,
+      active: (e: TiptapEditor) => e.isActive('heading', { level }),
+      action: (e: TiptapEditor) => e.chain().focus().toggleHeading({ level }).run(),
+      title: `Encabezado ${level}`, ariaLabel: `Encabezado ${level}`,
+    })) : [],
+    features.blockquote ? [
+      { label: '"', format: 'blockquote', active: (e) => e.isActive('blockquote'), action: (e) => e.chain().focus().toggleBlockquote().run(), title: 'Cita', ariaLabel: 'Cita' },
+    ] : [],
+    features.links ? [
+      { label: '↗', format: 'link', active: (e) => e.isActive('link'), action: (e) => onLinkClick(e), title: 'Enlace (Ctrl+K)', ariaLabel: 'Enlace' },
+    ] : [],
+  ]
+  return groups.filter((group) => group.length > 0)
+}
+
 const BubbleToolbar = forwardRef<RovingToolbarHandle, {
   editor: TiptapEditor
+  features: ResolvedFeatures
   onLinkClick: (editor: TiptapEditor) => void
-}>(function BubbleToolbar({ editor, onLinkClick }, ref) {
+}>(function BubbleToolbar({ editor, features, onLinkClick }, ref) {
   const toolbarRef = useRef<HTMLDivElement>(null)
   const coords = useBubblePos(editor, toolbarRef)
   useKeepInViewport(toolbarRef, [coords?.top, coords?.left])
+  const groups = useMemo(() => bubbleGroups(features, onLinkClick), [features, onLinkClick])
   const roving = useRovingToolbar({
-    count: 9,
+    count: groups.reduce((n, group) => n + group.length, 0),
     active: coords !== null,
     onEscape: () => editor.chain().focus().run(),
   })
@@ -292,47 +335,34 @@ const BubbleToolbar = forwardRef<RovingToolbarHandle, {
 
   if (!coords) return null
 
-  const btn = (
-    index: number,
-    label: string,
-    format: string,
-    active: boolean,
-    action: () => void,
-    title: string,
-    ariaLabel: string,
-  ) => (
-    <button
-      key={format}
-      ref={roving.registerButton(index)}
-      data-format={format}
-      className={active ? 'is-active' : ''}
-      tabIndex={roving.getTabIndex(index)}
-      onKeyDown={roving.onButtonKeyDown(index)}
-      onPointerDown={(e) => { e.preventDefault(); action() }}
-      title={title}
-      aria-label={ariaLabel}
-      aria-pressed={active}
-    >
-      {label}
-    </button>
-  )
-
-  const sep = () => <div className="cw-bubble-menu__divider" />
-
+  let index = 0
   return (
     <div ref={toolbarRef} role="toolbar" aria-label="Formato de texto" className="cw-bubble-menu" style={{ position: 'fixed', top: coords.top, left: coords.left }}>
-      {btn(0, 'B', 'bold',      editor.isActive('bold'),      () => editor.chain().focus().toggleBold().run(),      'Negrita (Ctrl+B)', 'Negrita')}
-      {btn(1, 'I', 'italic',    editor.isActive('italic'),    () => editor.chain().focus().toggleItalic().run(),    'Cursiva (Ctrl+I)', 'Cursiva')}
-      {btn(2, 'U', 'underline', editor.isActive('underline'), () => editor.chain().focus().toggleUnderline().run(), 'Subrayado (Ctrl+U)', 'Subrayado')}
-      {btn(3, 'S', 'strike',    editor.isActive('strike'),    () => editor.chain().focus().toggleStrike().run(),    'Tachado', 'Tachado')}
-      {sep()}
-      {btn(4, 'H1', 'h1', editor.isActive('heading', { level: 1 }), () => editor.chain().focus().toggleHeading({ level: 1 }).run(), 'Encabezado 1', 'Encabezado 1')}
-      {btn(5, 'H2', 'h2', editor.isActive('heading', { level: 2 }), () => editor.chain().focus().toggleHeading({ level: 2 }).run(), 'Encabezado 2', 'Encabezado 2')}
-      {btn(6, 'H3', 'h3', editor.isActive('heading', { level: 3 }), () => editor.chain().focus().toggleHeading({ level: 3 }).run(), 'Encabezado 3', 'Encabezado 3')}
-      {sep()}
-      {btn(7, '"', 'blockquote', editor.isActive('blockquote'), () => editor.chain().focus().toggleBlockquote().run(), 'Cita', 'Cita')}
-      {sep()}
-      {btn(8, '↗', 'link', editor.isActive('link'), () => onLinkClick(editor), 'Enlace (Ctrl+K)', 'Enlace')}
+      {groups.map((group, g) => (
+        <Fragment key={group[0].format}>
+          {g > 0 && <div className="cw-bubble-menu__divider" />}
+          {group.map((button) => {
+            const i = index++
+            const active = button.active(editor)
+            return (
+              <button
+                key={button.format}
+                ref={roving.registerButton(i)}
+                data-format={button.format}
+                className={active ? 'is-active' : ''}
+                tabIndex={roving.getTabIndex(i)}
+                onKeyDown={roving.onButtonKeyDown(i)}
+                onPointerDown={(e) => { e.preventDefault(); button.action(editor) }}
+                title={button.title}
+                aria-label={button.ariaLabel}
+                aria-pressed={active}
+              >
+                {button.label}
+              </button>
+            )
+          })}
+        </Fragment>
+      ))}
     </div>
   )
 })
@@ -799,6 +829,17 @@ function ImageInsertPopover({
   )
 }
 
+/** The feature each "/" menu item depends on (items not listed are always offered). */
+const SLASH_ITEM_FEATURE: Record<string, keyof ResolvedFeatures | undefined> = {
+  'heading-group': 'headings',
+  bulletList: 'lists',
+  orderedList: 'lists',
+  blockquote: 'blockquote',
+  link: 'links',
+  image: 'images',
+  table: 'tables',
+}
+
 // ── Editor ──────────────────────────────────────────────────────────────────
 
 export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
@@ -824,6 +865,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   onSuggestionStatusChange,
   ariaLabel,
   surface = 'volume',
+  features,
 }, ref) {
   const accessibleName = ariaLabel || placeholder
   const rafRef = useRef<number | null>(null)
@@ -844,6 +886,9 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   annotationHandlersRef.current = { onAnnotationClick, onAnnotationHover, onAnnotationStatusChange }
   const suggestionHandlersRef = useRef({ onSuggestionAccept, onSuggestionReject, onSuggestionStatusChange })
   suggestionHandlersRef.current = { onSuggestionAccept, onSuggestionReject, onSuggestionStatusChange }
+  // Construction-only, like `extensions`: the features shape the schema, and
+  // the menus must keep matching what the schema can actually hold.
+  const [enabled] = useState(() => resolveFeatures(features))
   const onReadyRef = useRef(onReady)
   onReadyRef.current = onReady
   // Tiptap emits 'create' (where BlockId assigns the initial ids) on a timeout
@@ -905,7 +950,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     } catch {}
   }, [linkPosition])
 
-  const slashItems = useMemo<SlashCommandItem[]>(() => [
+  const slashItems = useMemo<SlashCommandItem[]>(() => ([
     {
       id: 'heading-group',
       label: 'Encabezado',
@@ -962,7 +1007,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
         editor.chain().focus().deleteRange(range).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
       },
     },
-  ], [openLink])
+  ] satisfies SlashCommandItem[]).filter((item) => SLASH_ITEM_FEATURE[item.id] === undefined || enabled[SLASH_ITEM_FEATURE[item.id]!]), [openLink, enabled])
 
   const slashExtension = useMemo(() => SlashCommand.configure({
     items: slashItems,
@@ -986,17 +1031,12 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   const mergedExtensions = useMemo(
     () => mergeExtensions(
       [
-        StarterKit.configure({
-          link: { openOnClick: false, autolink: true },
-        }),
+        StarterKit.configure(starterKitOptions(enabled)),
         Placeholder.configure({ placeholder }),
         Typography,
-        UploadableImage.configure({ inline: false, allowBase64: true }),
-        Table.configure({ resizable: true }),
-        TableRow,
-        TableCell,
-        TableHeader,
-        slashExtension,
+        ...(enabled.images ? [UploadableImage.configure({ inline: false, allowBase64: true })] : []),
+        ...(enabled.tables ? [Table.configure({ resizable: true }), TableRow, TableCell, TableHeader] : []),
+        ...(enabled.slashMenu && slashItems.length > 0 ? [slashExtension] : []),
         InsertionCursor,
         BlockId.configure({ onBlocksChange: (change) => onBlocksChangeRef.current?.(change) }),
         Annotations.configure({
@@ -1073,7 +1113,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
       // separate path handled by ProseMirror's default HTML-paste parsing
       // via UploadableImage's own parseHTML rule (allowBase64: true above).
       handlePaste: (_view, event) => {
-        if (!onImageUpload) return false
+        if (!onImageUpload || !enabled.images) return false
         const files = Array.from(event.clipboardData?.files ?? [])
           .filter((f) => f.type.startsWith('image/'))
         if (files.length === 0) return false
@@ -1082,7 +1122,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
         return true
       },
       handleDrop: (view, event) => {
-        if (!onImageUpload) return false
+        if (!onImageUpload || !enabled.images) return false
         const files = Array.from(event.dataTransfer?.files ?? [])
           .filter((f) => f.type.startsWith('image/'))
         if (files.length === 0) return false
@@ -1209,8 +1249,11 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   // Ctrl+K: open link popover on selected text or when cursor is on a link
   useEffect(() => {
     if (!editor) return
+    if (!enabled.links) return
     const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      // Only the editor being written in: never hijack Ctrl+K for the rest of
+      // the page, nor for the other editors on it (e.g. a list of comments).
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k' && editor.view.hasFocus()) {
         e.preventDefault()
         if (!editor.state.selection.empty || editor.isActive('link')) {
           openLink(editor)
@@ -1219,7 +1262,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
-  }, [editor, openLink])
+  }, [editor, openLink, enabled.links])
 
   // Fire onChange once on mount so the host has the initial HTML
   useEffect(() => {
@@ -1280,14 +1323,15 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
 
   return (
     <div ref={rootRef} className={`cw-editor${className ? ` ${className}` : ''}`} data-surface={surface}>
-      {editor && (
+      {editor && enabled.bubbleMenu && (
         <BubbleToolbar
           ref={bubbleToolbarRef}
           editor={editor}
+          features={enabled}
           onLinkClick={openLink}
         />
       )}
-      {editor && <TableToolbar ref={tableToolbarRef} editor={editor} />}
+      {editor && enabled.tables && <TableToolbar ref={tableToolbarRef} editor={editor} />}
       {linkState && (
         <LinkPopover
           state={linkState}
