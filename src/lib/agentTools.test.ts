@@ -288,6 +288,14 @@ describe('annotate and remove_annotations', () => {
     expect(structured<Results>(result).results[0].id).toBe('assistant-s1')
   })
 
+  it("keeps the host's whileEditing mode for the assistant layer when adding annotations", async () => {
+    const { editor, execute } = await setup()
+    setAnnotations(editor, 'assistant', [], { whileEditing: 'track' })
+    execute('annotate', { annotations: [{ blockId: 'a', quote: 'quick', note: 'n' }] })
+    editor.commands.insertContentAt(1 + 'The qu'.length, 'XX')
+    expect(getAnnotations(editor, 'assistant')[0]).toMatchObject({ status: 'active', quote: 'quXXick' })
+  })
+
   it('honors the annotationLayer and idPrefix options', async () => {
     const { editor, execute } = await setup(PARAGRAPHS, { annotationLayer: 'copilot', idPrefix: 'cp-' })
     execute('annotate', { annotations: [{ blockId: 'a', quote: 'quick', note: 'n' }] })

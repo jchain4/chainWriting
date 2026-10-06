@@ -60,6 +60,23 @@ export interface ResolvedAnnotation extends Annotation {
   to: number | null
 }
 
+/**
+ * What happens to a layer's annotations when the user edits *inside* their
+ * marked text:
+ * - `stale` (default): they become stale until the exact quote is back —
+ *   right for marks that are only true of that exact text.
+ * - `track`: they stretch or shrink with the text and stay active, their
+ *   `quote` updated to the new text — right for layers the host recomputes
+ *   anyway, so marks don't flicker while it does. They still become stale if
+ *   all their text is deleted or an edit splits it across blocks.
+ */
+export type WhileEditing = 'stale' | 'track'
+
+export interface SetAnnotationsOptions {
+  /** Kept for the layer until changed or the layer is cleared; omit to keep the layer's current mode. */
+  whileEditing?: WhileEditing
+}
+
 export interface AnnotationsOptions {
   /** Click on marked text. Receives every active annotation under the click (they can overlap). */
   onClick?: (annotations: ResolvedAnnotation[], event: MouseEvent) => void
@@ -73,11 +90,13 @@ type Layers = Map<string, Map<string, ResolvedAnnotation>>
 
 interface AnnotationsState {
   layers: Layers
+  /** Layers in `track` mode (all others are `stale`). */
+  tracked: Set<string>
   decorations: DecorationSet
 }
 
 type Action =
-  | { type: 'set', layer: string, annotations: Annotation[] }
+  | { type: 'set', layer: string, annotations: Annotation[], whileEditing?: WhileEditing }
   | { type: 'clear', layer?: string }
 
 export const annotationsPluginKey = new PluginKey<AnnotationsState>('cwAnnotations')
@@ -154,34 +173,46 @@ export const Annotations = Extension.create<AnnotationsOptions>({
       key: annotationsPluginKey,
 
       state: {
-        init: () => ({ layers: new Map(), decorations: DecorationSet.empty }),
+        init: () => ({ layers: new Map(), tracked: new Set(), decorations: DecorationSet.empty }),
         apply: (tr, value, _oldState, newState) => {
           const action = tr.getMeta(annotationsPluginKey) as Action | undefined
           if (!tr.docChanged && !action) return value
 
-          let { layers } = value
+          let { layers, tracked } = value
           const findBlock = lazyBlockIndex(newState.doc)
 
           if (tr.docChanged) {
             const map = (pos: number, assoc: number) => tr.mapping.map(pos, assoc)
+            const carry = (a: ResolvedAnnotation, name: string) => {
+              const track = tracked.has(name)
+              const range = mapAnchor(a, rangeOf(a), newState.doc, map, findBlock, { track })
+              // A tracked mark's quote is whatever its range holds now.
+              const quote = track && range && a.quote ? newState.doc.textBetween(range.from, range.to, '\n', '\n') : a.quote
+              return withRange({ ...a, quote }, name, range)
+            }
             layers = new Map([...layers].map(([name, annotations]) => [
               name,
-              new Map([...annotations].map(([id, a]) => [id, withRange(a, name, mapAnchor(a, rangeOf(a), newState.doc, map, findBlock))])),
+              new Map([...annotations].map(([id, a]) => [id, carry(a, name)])),
             ]))
           }
 
           if (action) {
             layers = new Map(layers)
+            tracked = new Set(tracked)
             if (action.type === 'set') {
               layers.set(action.layer, new Map(action.annotations.map((a) => [a.id, withRange(a, action.layer, resolveAnchor(a, findBlock))])))
+              if (action.whileEditing === 'track') tracked.add(action.layer)
+              else if (action.whileEditing === 'stale') tracked.delete(action.layer)
             } else if (action.layer === undefined) {
               layers.clear()
+              tracked.clear()
             } else {
               layers.delete(action.layer)
+              tracked.delete(action.layer)
             }
           }
 
-          return { layers, decorations: buildDecorations(newState.doc, layers) }
+          return { layers, tracked, decorations: buildDecorations(newState.doc, layers) }
         },
       },
 
@@ -238,12 +269,18 @@ export const Annotations = Extension.create<AnnotationsOptions>({
 /**
  * Replaces every annotation in `layer` with `annotations` and returns how
  * each one resolved (`stale` = its quote/block wasn't found). Other layers
- * are left untouched.
+ * are left untouched. `options.whileEditing` sets how the layer reacts to
+ * edits inside its marks (see WhileEditing); it sticks to the layer.
  */
-export function setAnnotations(editor: TiptapEditor, layer: string, annotations: Annotation[]): ResolvedAnnotation[] {
+export function setAnnotations(
+  editor: TiptapEditor,
+  layer: string,
+  annotations: Annotation[],
+  options: SetAnnotationsOptions = {},
+): ResolvedAnnotation[] {
   if (!annotationsPluginKey.getState(editor.state)) return []
   editor.view.dispatch(editor.state.tr
-    .setMeta(annotationsPluginKey, { type: 'set', layer, annotations } satisfies Action)
+    .setMeta(annotationsPluginKey, { type: 'set', layer, annotations, whileEditing: options.whileEditing } satisfies Action)
     .setMeta('addToHistory', false))
   return getAnnotations(editor, layer)
 }

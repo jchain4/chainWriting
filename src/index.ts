@@ -31,7 +31,9 @@ export type { HighlightRange } from './lib/highlightPlugin'
 export { BlockId, getBlocks, diffBlocks, DEFAULT_BLOCK_TYPES } from './lib/blockId'
 export type { Block, BlocksChange, BlockIdOptions } from './lib/blockId'
 export { Annotations, setAnnotations, clearAnnotations, getAnnotations, findQuote } from './lib/annotations'
-export type { Annotation, AnnotationStatus, ResolvedAnnotation, AnnotationsOptions } from './lib/annotations'
+export type {
+  Annotation, AnnotationStatus, ResolvedAnnotation, AnnotationsOptions, SetAnnotationsOptions, WhileEditing,
+} from './lib/annotations'
 export {
   Suggestions, addSuggestions, removeSuggestions, getSuggestions, acceptSuggestion, rejectSuggestion,
 } from './lib/suggestions'

@@ -116,7 +116,7 @@ function App() {
 | `isReady()` | Whether the editor has mounted and every block has its id (the moment `onReady` fires) |
 | `getEditor()` | Escape hatch — the raw Tiptap `Editor` instance, `null` until mounted |
 | `getBlocks(ids?)` | The document as a list of blocks with stable ids — or just the given ones — see "Blocks" |
-| `setAnnotations(layer, annotations)` | Mark text by content in a named layer, replacing that layer — see "Annotations" |
+| `setAnnotations(layer, annotations, options?)` | Mark text by content in a named layer, replacing that layer — see "Annotations" |
 | `clearAnnotations(layer?)` | Remove one layer's annotations, or all of them |
 | `getAnnotations(layer?)` | Current annotations (active and stale) |
 | `addSuggestions(suggestions)` | Propose changes, shown track-changes style — see "Suggestions" |
@@ -281,6 +281,7 @@ const results = editorRef.current!.setAnnotations('style', [
 - **Repeated phrases**: pass `prefix`/`suffix` (the text right before/after) to pick the right occurrence. Context needn't match exactly: it's scored by how many characters match, counted outwards from the quote, and the best-scoring occurrence wins. On a tie — or with no context at all — a whole-word occurrence wins (`"casa"` matches the word *casa*, not the start of *casas*, unless no whole-word *casa* exists), then the first one. The same matcher is exported as `findQuote(text, quote, prefix?, suffix?)`.
 - **While the user edits**, annotations follow their text — through typing elsewhere, Enter, and joining paragraphs (their `blockId` is updated if the text moves to another block). Typing right at the edge of a marked phrase doesn't stretch the mark.
 - **Stale**: when the marked text itself changes or disappears (e.g. the user rewrote the flagged phrase), the annotation becomes `stale` — unmarked, but kept. If the text comes back (undo, or retyped), it becomes `active` again. Both transitions are reported through `onAnnotationStatusChange`; changes caused by the host's own `setAnnotations`/`clearAnnotations` calls aren't.
+- **Layers you recompute anyway**: pass `{ whileEditing: 'track' }` — `setAnnotations('readability', list, { whileEditing: 'track' })` — and that layer's marks stretch or shrink as the user edits *inside* them, staying active with their `quote` updated to the new text, instead of turning stale and flickering until your next recompute. They still turn stale if all their text is deleted or Enter splits it across blocks. The mode sticks to the layer (later `setAnnotations` calls without options keep it) until you pass `'stale'` or clear the layer.
 - **Events**: `onAnnotationClick` receives every active annotation under the click (they can overlap) and never prevents normal cursor placement. `onAnnotationHover` fires once per change, with `[]` when the pointer leaves.
 - **Styling**: inline marks get `.cw-annotation` and `.cw-annotation--{kind}`; whole-block ones `.cw-annotation-block` and `.cw-annotation-block--{kind}`; plus your own `className`. Default tokens: `--cw-annotation-bg`, `--cw-annotation-decoration`, `--cw-annotation-block-border`.
 

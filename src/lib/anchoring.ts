@@ -108,6 +108,10 @@ export function resolveAnchor(anchor: Anchor, findBlock: BlockLookup): AnchorRan
  * and lets it follow its text even into another block, e.g. after joining two
  * paragraphs); if the mapped range no longer holds the quote, by searching
  * for the quote again in its block.
+ *
+ * With `track`, a mapped range whose text changed is kept as long as it's
+ * still non-empty and inside one text block — the caller then reads the new
+ * text from the range.
  */
 export function mapAnchor(
   anchor: Anchor,
@@ -115,6 +119,7 @@ export function mapAnchor(
   doc: ProseMirrorNode,
   map: (pos: number, assoc: number) => number,
   findBlock: BlockLookup,
+  { track = false }: { track?: boolean } = {},
 ): AnchorRange | null {
   if (range) {
     if (!anchor.quote) {
@@ -128,7 +133,7 @@ export function mapAnchor(
       if (from < to) {
         const $from = doc.resolve(from)
         const $to = doc.resolve(to)
-        if ($from.sameParent($to) && $from.parent.isTextblock && doc.textBetween(from, to, '\n', '\n') === anchor.quote) {
+        if ($from.sameParent($to) && $from.parent.isTextblock && (track || doc.textBetween(from, to, '\n', '\n') === anchor.quote)) {
           return { blockId: ($from.parent.attrs.blockId as string | null) || range.blockId, from, to }
         }
       }

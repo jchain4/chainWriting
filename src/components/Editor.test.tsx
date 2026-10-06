@@ -84,6 +84,13 @@ describe('Editor', () => {
     expect(ref.current!.getBlocks(['c', 'a']).map((b) => b.text)).toEqual(['A', 'C'])
   })
 
+  it("passes setAnnotations options through the ref handle (whileEditing: 'track')", async () => {
+    const { ref } = await renderReadyEditor({ initialContent: '<p data-block-id="a">The quick fox</p>' })
+    ref.current!.setAnnotations('live', [{ id: 'x', blockId: 'a', quote: 'quick' }], { whileEditing: 'track' })
+    ref.current!.getEditor()!.commands.insertContentAt(1 + 'The qu'.length, 'XX')
+    expect(ref.current!.getAnnotations('live')[0]).toMatchObject({ status: 'active', quote: 'quXXick' })
+  })
+
   it('sets, reads and clears annotations through the ref handle', async () => {
     const { ref, container } = await renderReadyEditor({ initialContent: '<p data-block-id="a">The quick fox</p>' })
     await waitFor(() => expect(ref.current!.getBlocks()).toHaveLength(1))

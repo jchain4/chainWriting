@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `onReady` prop — called once when the editor has mounted and every block has its id, with the initial blocks. The ref handle is usable inside it, so hosts no longer need to poll `isReady()` before calling `setAnnotations()`/`addSuggestions()`.
 - `BlocksChange.blocks` — `onBlocksChange` now also delivers the added and updated blocks themselves (in reading order), so incremental analysis no longer needs a full `getBlocks()` on every change.
 - `getBlocks(ids?)` on `EditorHandle` (and a third `ids` argument on the standalone `getBlocks(doc, types?, ids?)`) — returns only the given blocks, in reading order, extracting only their text and stopping as soon as all are found.
+- `setAnnotations(layer, list, { whileEditing: 'track' })` — a per-layer mode where marks stretch or shrink with edits inside them and stay active (their `quote` updated to the new text), instead of turning stale. Meant for layers the host recomputes anyway, so marks don't flicker in between. The mode sticks to the layer until changed or the layer is cleared; the default (`'stale'`) is unchanged.
 - A one-time `console.warn` when `setAnnotations()` or `addSuggestions()` is called before the editor is ready, instead of silently doing nothing.
 
 ### Changed

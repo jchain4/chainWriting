@@ -16,7 +16,7 @@ import { mergeExtensions } from '../lib/extensions'
 import { BlockId, getBlocks, type Block, type BlockIdOptions, type BlocksChange } from '../lib/blockId'
 import {
   Annotations, setAnnotations, clearAnnotations, getAnnotations,
-  type Annotation, type ResolvedAnnotation,
+  type Annotation, type ResolvedAnnotation, type SetAnnotationsOptions,
 } from '../lib/annotations'
 import {
   Suggestions, addSuggestions, removeSuggestions, getSuggestions, acceptSuggestion, rejectSuggestion,
@@ -151,8 +151,10 @@ export interface EditorHandle {
    * in block `blockId`" — replacing every annotation previously set in
    * `layer`. Layers (e.g. "spelling", "comments") are independent. Returns
    * how each one resolved: `stale` means its block/quote wasn't found.
+   * `options.whileEditing: 'track'` makes the layer's marks stretch with
+   * edits inside them instead of turning stale (it sticks to the layer).
    */
-  setAnnotations: (layer: string, annotations: Annotation[]) => ResolvedAnnotation[]
+  setAnnotations: (layer: string, annotations: Annotation[], options?: SetAnnotationsOptions) => ResolvedAnnotation[]
   /** Removes the annotations of `layer`, or all of them when omitted. */
   clearAnnotations: (layer?: string) => void
   /** Current annotations (active and stale) of `layer`, or of every layer. */
@@ -1132,9 +1134,9 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     isReady: () => ready,
     getEditor: () => editor,
     getBlocks: readBlocks,
-    setAnnotations: (layer, annotations) => {
+    setAnnotations: (layer, annotations, options) => {
       warnIfNotReady('setAnnotations')
-      return editor ? setAnnotations(editor, layer, annotations) : []
+      return editor ? setAnnotations(editor, layer, annotations, options) : []
     },
     clearAnnotations: (layer) => { if (editor) clearAnnotations(editor, layer) },
     getAnnotations: (layer) => editor ? getAnnotations(editor, layer) : [],

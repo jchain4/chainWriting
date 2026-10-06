@@ -435,6 +435,97 @@ describe('annotations while editing', () => {
   })
 })
 
+describe("whileEditing: 'track'", () => {
+  const QUICK = 1 + 'The '.length // "quick" spans QUICK..QUICK+5 in PARAGRAPHS
+
+  it('keeps a mark active while the user types inside it, updating its quote and highlight', async () => {
+    const onStatusChange = vi.fn()
+    const editor = await makeEditor(PARAGRAPHS, { onStatusChange })
+    setAnnotations(editor, 'live', [{ id: 'x', blockId: 'a', quote: 'quick' }], { whileEditing: 'track' })
+    editor.commands.insertContentAt(QUICK + 2, 'XX')
+    expect(only(editor, 'live')).toMatchObject({ status: 'active', quote: 'quXXick' })
+    expect(textOf(editor, only(editor, 'live'))).toBe('quXXick')
+    expect(marked(editor)).toEqual(['quXXick'])
+    expect(onStatusChange).not.toHaveBeenCalled()
+  })
+
+  it('shrinks when part of the marked text is deleted', async () => {
+    const editor = await makeEditor(PARAGRAPHS)
+    setAnnotations(editor, 'live', [{ id: 'x', blockId: 'a', quote: 'quick brown' }], { whileEditing: 'track' })
+    editor.commands.deleteRange({ from: QUICK + 2, to: QUICK + 8 }) // "ick br"
+    expect(only(editor, 'live')).toMatchObject({ status: 'active', quote: 'quown' })
+  })
+
+  it('still does not stretch when typing right at its edges', async () => {
+    const editor = await makeEditor(PARAGRAPHS)
+    const [a] = setAnnotations(editor, 'live', [{ id: 'x', blockId: 'a', quote: 'quick' }], { whileEditing: 'track' })
+    editor.commands.insertContentAt(a.to!, 'ly')
+    editor.commands.insertContentAt(a.from!, 'very ')
+    expect(only(editor, 'live').quote).toBe('quick')
+  })
+
+  it('becomes stale when all of its text is deleted', async () => {
+    const editor = await makeEditor(PARAGRAPHS)
+    const [a] = setAnnotations(editor, 'live', [{ id: 'x', blockId: 'a', quote: 'quick' }], { whileEditing: 'track' })
+    editor.commands.deleteRange({ from: a.from!, to: a.to! })
+    expect(only(editor, 'live').status).toBe('stale')
+  })
+
+  it('becomes stale when Enter splits its text across two blocks', async () => {
+    const editor = await makeEditor(PARAGRAPHS)
+    setAnnotations(editor, 'live', [{ id: 'x', blockId: 'a', quote: 'quick brown' }], { whileEditing: 'track' })
+    editor.chain().setTextSelection(QUICK + 5).splitBlock().run()
+    expect(only(editor, 'live').status).toBe('stale')
+  })
+
+  it('follows undo back to the original text', async () => {
+    const editor = await makeEditor(PARAGRAPHS)
+    setAnnotations(editor, 'live', [{ id: 'x', blockId: 'a', quote: 'quick' }], { whileEditing: 'track' })
+    editor.commands.insertContentAt(QUICK + 2, 'XX')
+    editor.commands.undo()
+    expect(only(editor, 'live')).toMatchObject({ status: 'active', quote: 'quick' })
+  })
+
+  it('only affects its own layer', async () => {
+    const editor = await makeEditor(PARAGRAPHS)
+    setAnnotations(editor, 'live', [{ id: 'x', blockId: 'a', quote: 'quick' }], { whileEditing: 'track' })
+    setAnnotations(editor, 'exact', [{ id: 'y', blockId: 'a', quote: 'quick' }])
+    editor.commands.insertContentAt(QUICK + 2, 'XX')
+    expect(only(editor, 'live').status).toBe('active')
+    expect(only(editor, 'exact').status).toBe('stale')
+  })
+
+  it('sticks to the layer across later setAnnotations calls until changed', async () => {
+    const editor = await makeEditor(PARAGRAPHS)
+    setAnnotations(editor, 'live', [{ id: 'x', blockId: 'a', quote: 'quick' }], { whileEditing: 'track' })
+    setAnnotations(editor, 'live', [{ id: 'x', blockId: 'a', quote: 'quick' }]) // no options: keeps 'track'
+    editor.commands.insertContentAt(QUICK + 2, 'XX')
+    expect(only(editor, 'live').status).toBe('active')
+
+    setAnnotations(editor, 'live', [{ id: 'y', blockId: 'a', quote: 'brown' }], { whileEditing: 'stale' })
+    editor.commands.insertContentAt(1 + 'The quXXick b'.length, 'Z')
+    expect(only(editor, 'live').status).toBe('stale')
+  })
+
+  it('is forgotten when the layer is cleared', async () => {
+    for (const clear of [(e: TiptapEditor) => clearAnnotations(e, 'live'), (e: TiptapEditor) => clearAnnotations(e)]) {
+      const editor = await makeEditor(PARAGRAPHS)
+      setAnnotations(editor, 'live', [{ id: 'x', blockId: 'a', quote: 'quick' }], { whileEditing: 'track' })
+      clear(editor)
+      setAnnotations(editor, 'live', [{ id: 'x', blockId: 'a', quote: 'quick' }])
+      editor.commands.insertContentAt(QUICK + 2, 'XX')
+      expect(only(editor, 'live').status).toBe('stale')
+    }
+  })
+
+  it('leaves whole-block annotations as they are', async () => {
+    const editor = await makeEditor(PARAGRAPHS)
+    setAnnotations(editor, 'live', [{ id: 'x', blockId: 'a' }], { whileEditing: 'track' })
+    editor.commands.insertContentAt(QUICK + 2, 'XX')
+    expect(only(editor, 'live')).toMatchObject({ status: 'active', quote: undefined })
+  })
+})
+
 describe('annotation events', () => {
   it('reports clicks on annotated text, with every overlapping annotation', async () => {
     const onClick = vi.fn()
