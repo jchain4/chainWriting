@@ -69,6 +69,24 @@ export function useViewportChange(onChange: () => void, active: boolean) {
   }, [active])
 }
 
+/**
+ * The CSS `--cw-u` unit in pixels for floating UI inside `el`: 1 at the
+ * browser's default 16px font size and `--cw-ui-scale` 1 — based, like the
+ * CSS, on the user's font-size preference (`medium`), not on the page's root
+ * font size. For positioning code that needs the menus' scaled sizes before
+ * they're rendered.
+ */
+export function uiUnit(el: Element | null): number {
+  const host = el ?? document.body
+  const probe = document.createElement('span')
+  probe.style.cssText = 'position:absolute;visibility:hidden;font-size:medium'
+  host.appendChild(probe)
+  const userFont = parseFloat(getComputedStyle(probe).fontSize) || 16
+  probe.remove()
+  const scale = parseFloat(getComputedStyle(host).getPropertyValue('--cw-ui-scale')) || 1
+  return (userFont / 16) * scale
+}
+
 /** Whether a rect is entirely outside the viewport vertically (its anchor scrolled away). */
 export function isOffscreen(rect: { top: number, bottom: number }): boolean {
   return rect.bottom < 0 || rect.top > window.innerHeight

@@ -14,6 +14,7 @@ import { TextSelection } from '@tiptap/pm/state'
 import type { AnyExtension, Content, Editor as TiptapEditor, JSONContent } from '@tiptap/react'
 import { mergeExtensions } from '../lib/extensions'
 import { InsertionCursor } from '../lib/insertionCursor'
+import { centerVertically } from '../lib/scrolling'
 import { resolveFeatures, starterKitOptions, type EditorFeatures, type ResolvedFeatures } from '../lib/features'
 import { BlockId, getBlocks, type Block, type BlockIdOptions, type BlocksChange } from '../lib/blockId'
 import {
@@ -28,7 +29,7 @@ import { UploadableImage } from '../lib/imageExtension'
 import { insertImageWithUpload } from '../lib/imageUpload'
 import { SlashCommand, type SlashCommandItem, type SlashCommandState, type SlashKeyHandler } from '../lib/slashCommandExtension'
 import { useRovingToolbar, type RovingToolbarHandle } from '../hooks/useRovingToolbar'
-import { isOffscreen, useKeepInViewport, useViewportChange, VIEWPORT_MARGIN } from '../hooks/useFloating'
+import { isOffscreen, uiUnit, useKeepInViewport, useViewportChange, VIEWPORT_MARGIN } from '../hooks/useFloating'
 import {
   IconHeading1, IconHeading2, IconHeading3, IconHeadings,
   IconBulletList, IconOrderedList, IconQuote,
@@ -234,8 +235,11 @@ function useBubblePos(editor: TiptapEditor | null, toolbarRef: RefObject<HTMLDiv
       if (!sel || sel.rangeCount === 0) { setCoords(null); return }
       const rect = sel.getRangeAt(0).getBoundingClientRect()
       if (!rect.width || isOffscreen(rect)) { setCoords(null); return }
-      const bubbleH = 36
-      const gap = 8
+      // Its real height once shown; before that, the default height in the
+      // current --cw-ui-scale.
+      const u = uiUnit(editor.view.dom)
+      const bubbleH = toolbarRef.current?.offsetHeight || 36 * u
+      const gap = 8 * u
       const top = rect.top - bubbleH - gap >= 0 ? rect.top - bubbleH - gap : rect.bottom + gap
       setCoords({ top, left: rect.left + rect.width / 2 })
     }
@@ -662,8 +666,9 @@ function useTableToolbarPos(editor: TiptapEditor | null) {
         const rect = tableEl.getBoundingClientRect()
         // Hide once the table has scrolled away; while part of it is still
         // in view, keep the toolbar on screen (stuck to the top edge).
-        if (rect.bottom < 48 || rect.top > window.innerHeight) { setCoords(null); return }
-        setCoords({ top: Math.max(VIEWPORT_MARGIN, rect.top - 40), left: rect.left })
+        const u = uiUnit(editor.view.dom)
+        if (rect.bottom < 48 * u || rect.top > window.innerHeight) { setCoords(null); return }
+        setCoords({ top: Math.max(VIEWPORT_MARGIN, rect.top - 40 * u), left: rect.left })
       } catch {
         setCoords(null)
       }
@@ -928,8 +933,9 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   const linkPosition = useCallback((ed: TiptapEditor, from: number, to: number) => {
     const startCoords = ed.view.coordsAtPos(from)
     const endCoords = ed.view.coordsAtPos(to)
-    const popoverH = 44
-    const gap = 10
+    const u = uiUnit(ed.view.dom)
+    const popoverH = 44 * u
+    const gap = 10 * u
     const top = startCoords.bottom + popoverH + gap < window.innerHeight
       ? startCoords.bottom + gap
       : startCoords.top - popoverH - gap
@@ -1020,10 +1026,10 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
     rafRef.current = requestAnimationFrame(() => {
       try {
+        // Centre the cursor in whatever scrolls the editor: its own box (with
+        // --cw-max-height), a panel around it, or the page.
         const { from } = editor.state.selection
-        const coords = editor.view.coordsAtPos(from)
-        const desired = window.scrollY + coords.top - window.innerHeight / 2
-        window.scrollTo({ top: Math.max(0, desired), behavior: 'instant' })
+        centerVertically(editor.view.coordsAtPos(from).top, editor.view.dom)
       } catch {}
     })
   }, [typewriterMode])

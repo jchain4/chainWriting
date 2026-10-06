@@ -1,7 +1,7 @@
 import { useRef } from 'react'
 import { render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { horizontalShift, isOffscreen, useKeepInViewport, useViewportChange, VIEWPORT_MARGIN } from './useFloating'
+import { horizontalShift, isOffscreen, uiUnit, useKeepInViewport, useViewportChange, VIEWPORT_MARGIN } from './useFloating'
 
 const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
 
@@ -37,6 +37,57 @@ describe('isOffscreen', () => {
     expect(isOffscreen({ top: window.innerHeight + 1, bottom: window.innerHeight + 30 })).toBe(true)
     expect(isOffscreen({ top: -50, bottom: 10 })).toBe(false)
     expect(isOffscreen({ top: window.innerHeight - 5, bottom: window.innerHeight + 30 })).toBe(false)
+  })
+})
+
+describe('uiUnit', () => {
+  afterEach(() => {
+    document.documentElement.style.fontSize = ''
+    document.body.replaceChildren()
+  })
+
+  function inside(scale?: string) {
+    const outer = document.createElement('div')
+    if (scale) outer.style.setProperty('--cw-ui-scale', scale)
+    const inner = document.createElement('div')
+    outer.append(inner)
+    document.body.append(outer)
+    return inner
+  }
+
+  it('is 1 at the default font size and scale', () => {
+    expect(uiUnit(inside())).toBe(1)
+    expect(uiUnit(null)).toBe(1)
+  })
+
+  it('ignores the page’s root font size (sites often change it, e.g. 62.5%)', () => {
+    document.documentElement.style.fontSize = '10px'
+    expect(uiUnit(inside())).toBe(1)
+  })
+
+  it('follows the user’s default font size (CSS `medium`)', () => {
+    const original = window.getComputedStyle
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((el, pseudo) => {
+      const style = original(el, pseudo)
+      if ((el as HTMLElement).style?.fontSize === 'medium') return { ...style, fontSize: '20px', getPropertyValue: style.getPropertyValue.bind(style) } as CSSStyleDeclaration
+      return style
+    })
+    expect(uiUnit(inside())).toBe(1.25)
+    vi.restoreAllMocks()
+  })
+
+  it('follows --cw-ui-scale set on any ancestor', () => {
+    expect(uiUnit(inside('1.5'))).toBe(1.5)
+  })
+
+  it('leaves no probe element behind', () => {
+    const el = inside()
+    uiUnit(el)
+    expect(el.childElementCount).toBe(0)
+  })
+
+  it('falls back to 1 for an invalid scale', () => {
+    expect(uiUnit(inside('big'))).toBe(1)
   })
 })
 

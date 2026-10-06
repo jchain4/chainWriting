@@ -516,6 +516,41 @@ describe('Editor', () => {
       } finally { cleanupFocus(); restore() }
     })
 
+    it('leaves room for the bubble menu at its scaled size (--cw-ui-scale)', async () => {
+      document.documentElement.style.setProperty('--cw-ui-scale', '2')
+      const { restore, bubbleTop } = await withSelectedText()
+      try {
+        expect(bubbleTop()).toBe('212px') // 300 - 36×2 - 8×2
+      } finally {
+        document.documentElement.style.removeProperty('--cw-ui-scale')
+        cleanupFocus(); restore()
+      }
+    })
+
+    it('centres the cursor in the editor’s scroll container in typewriter mode, not the page', async () => {
+      const restore = mockSelectionRect()
+      const panel = document.createElement('div')
+      panel.style.overflowY = 'auto'
+      Object.defineProperty(panel, 'scrollHeight', { configurable: true, value: 3000 })
+      Object.defineProperty(panel, 'clientHeight', { configurable: true, value: 400 })
+      const panelScroll = vi.fn()
+      panel.scrollTo = panelScroll as unknown as typeof panel.scrollTo
+      document.body.append(panel)
+      const windowScroll = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+      try {
+        const ref = createRef<EditorHandle>()
+        render(<Editor ref={ref} typewriterMode initialContent="<p>hello</p>" />, { container: panel })
+        await waitFor(() => expect(ref.current?.isReady()).toBe(true))
+        ref.current!.getEditor()!.commands.insertContentAt(2, 'x')
+        await waitFor(() => expect(panelScroll).toHaveBeenCalled())
+        expect(windowScroll).not.toHaveBeenCalled()
+      } finally {
+        windowScroll.mockRestore()
+        panel.remove()
+        cleanupFocus(); restore()
+      }
+    })
+
     it('re-places it when a scroll container (not the page) scrolls', async () => {
       const { moveTo, restore, bubbleTop } = await withSelectedText()
       const panel = document.createElement('div')
@@ -726,6 +761,26 @@ describe('Editor', () => {
       // Table colours follow the page's text colour, so they show on light pages too.
       expect(css).toMatch(/--cw-table-border:\s*color-mix\(in srgb, currentColor/)
       expect(css).toMatch(/--cw-table-header-bg:\s*color-mix\(in srgb, currentColor/)
+      // Floating menus are sized in --cw-u (scales with the user's font size
+      // and --cw-ui-scale): no fixed pixel sizes left, except hairline borders.
+      // Based on the user's default font size (medium), not the page's root size.
+      expect(css).toMatch(/@property --cw-u \{\s*syntax: '<length>';\s*inherits: true;/)
+      expect(css).toMatch(/\.cw-bubble-menu,\s*\.cw-link-popover,\s*\.cw-slash-menu \{\s*font-size: medium;\s*--cw-u: calc\(1em \/ 16 \* var\(--cw-ui-scale, 1\)\);/)
+      expect(css).not.toContain('rem * var(--cw-ui-scale')
+      // (Forced-colours outlines below are deliberately crisp fixed-width lines.)
+      const scaledPart = css.slice(0, css.indexOf('@media (forced-colors: active)'))
+      for (const [, selector, body] of scaledPart.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        if (!/^\s*\.cw-(bubble-menu|link-|slash-menu|table-menu)/.test(selector.trim().split('\n').pop()!)) continue
+        for (const declaration of body.split(';')) {
+          if (/^\s*(border|-webkit-backdrop-filter|backdrop-filter|text-underline-offset)\s*:|^\s*width:\s*1px|calc\(100vw - 16px\)/.test(declaration)) continue
+          expect(declaration, selector.trim()).not.toMatch(/\d+px/)
+        }
+      }
+      // Forced colours (Windows High Contrast) drop box shadows: real outlines instead.
+      const forced = css.slice(css.indexOf('@media (forced-colors: active)'))
+      expect(forced).toMatch(/\.cw-editor \.ProseMirror:focus \{\s*outline: 2px solid Highlight;/)
+      expect(forced).toMatch(/\.cw-bubble-menu button:focus-visible,[^{]*\{\s*outline: 2px solid Highlight;/)
+      expect(forced).toContain('.cw-slash-menu button.is-active')
       // Height limits for constrained inputs such as a comment box.
       expect(css).toContain('min-height: var(--cw-min-height, auto)')
       expect(css).toContain('max-height: var(--cw-max-height, none)')

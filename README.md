@@ -64,7 +64,7 @@ function App() {
 |------|------|---------|-------------|
 | `initialContent` | `string` | `''` | Initial HTML content. Read once at construction — see "Imperative API" to load new content later |
 | `placeholder` | `string` | `'Start writing…'` | Placeholder text when empty |
-| `typewriterMode` | `boolean` | `false` | Keep cursor vertically centered |
+| `typewriterMode` | `boolean` | `false` | Keep cursor vertically centered — in whatever scrolls the editor: the page, a panel around it, or the editor itself (with `--cw-max-height`) |
 | `className` | `string` | — | Extra class on `.cw-editor` for scoped CSS variable overrides |
 | `extensions` | `AnyExtension[]` | — | Extra Tiptap extensions merged into the built-in set — see "Customizing extensions" |
 | `editable` | `boolean` | `true` | Whether the editor accepts input. Reactive — unlike `extensions`/`initialContent`, toggling this after mount live-updates the editor |
@@ -459,6 +459,14 @@ All but `ring` mix their colours from the page's own text colour, so they fit li
 
 Whatever the surface, reaching the editor with the keyboard (Tab) shows `--cw-focus-ring` until the user types or clicks, so keyboard users always see where focus is.
 
+### Menu size
+
+The floating menus and popovers (formatting, tables, `/`, links, images) are sized from the reader's own default font size, as set in their browser — not from the page's root font size, which sites often change (e.g. `html { font-size: 62.5% }`). Make them larger or smaller with one token, on `.cw-editor` or any ancestor:
+
+```css
+.my-comment-box .cw-editor { --cw-ui-scale: 0.9; }
+```
+
 ### Tokens
 
 Override any CSS variable on `.cw-editor` or a parent selector:
@@ -486,7 +494,7 @@ This section documents specific, fixed gaps — it isn't a formal WCAG conforman
 
 **Screen readers**: the editing surface exposes `role="textbox"` and `aria-multiline="true"`, with its accessible name coming from the `ariaLabel` prop (falling back to `placeholder`). Every icon/glyph-only button (bold, italic, headings, table actions, link/image popovers, etc.) has a real `aria-label` rather than relying on its visible glyph or `title`; the 8 text-formatting toggle buttons also expose `aria-pressed`. The floating toolbars are `role="toolbar"`. The `/` command menu exposes `role="listbox"`/`role="option"` with a dynamic `aria-activedescendant` on the editing surface itself, since focus stays there while you type — this is a pragmatic pattern (the same one used by several `@`-mention-style autocompletes over `contenteditable`), not a strict ARIA 1.2 `combobox`, so a strict validator may flag the `role="textbox"` + `aria-expanded` pairing even though it works well with NVDA/JAWS/VoiceOver in practice.
 
-**Color contrast & focus**: default toolbar text meets WCAG AA (≥4.5:1) against the default dark bubble background; every keyboard-focusable button shows a visible focus ring (`--cw-focus-ring`, themeable like the rest of the tokens), and so does the editing area whenever it's reached with the keyboard (Tab), until the user starts typing — whatever its `surface`.
+**Color contrast & focus**: default toolbar text meets WCAG AA (≥4.5:1) against the default dark bubble background; every keyboard-focusable button shows a visible focus ring (`--cw-focus-ring`, themeable like the rest of the tokens), and so does the editing area whenever it's reached with the keyboard (Tab), until the user starts typing — whatever its `surface`. In forced-colours modes (e.g. Windows High Contrast), which drop shadows and backgrounds, the focused editor, focused buttons, active menu items, annotations and selected table cells get real outlines and lines in the system colours instead.
 
 **Images**: the image-insert popover has an alt-text field (optional — an empty value correctly marks the image as decorative rather than being forced non-empty).
 
