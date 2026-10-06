@@ -28,7 +28,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "build:lib": "tsc -b && vite build --config vite.lib.config.ts && tsc -p tsconfig.lib.json",
+    "build:lib": "tsc -b && vite build --config vite.lib.config.ts && tsc -p tsconfig.lib.json && node -e \"require('fs').writeFileSync('dist/editor.css.d.ts', 'export {}\\n')\"",
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",

@@ -6,7 +6,7 @@ import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
 import { UploadableImage } from './imageExtension'
-import { BlockId, diffBlocks, getBlocks, type BlockIdOptions, type BlocksChange } from './blockId'
+import { BLOCK_ID_PATTERN, BlockId, diffBlocks, getBlocks, type BlockIdOptions, type BlocksChange } from './blockId'
 
 // See imageExtension.test.ts: every headless editor must be destroyed, or
 // EditorView's pending timers fire after jsdom teardown.
@@ -271,6 +271,100 @@ describe('BlockId — options', () => {
       blockId: { generateId: () => queue.shift() ?? 'fallback' },
     })
     expect(ids(editor)).toEqual(['taken', 'free'])
+  })
+})
+
+describe('BlockId — id format', () => {
+  async function withDefaultIds(content: Content) {
+    const editor = new TiptapEditor({ extensions: [StarterKit, BlockId], content })
+    liveEditors.push(editor)
+    await new Promise<void>((resolve) => editor.on('create', () => resolve()))
+    return editor
+  }
+
+  it('generates 8-character [0-9a-z] ids by default, which match BLOCK_ID_PATTERN', async () => {
+    const editor = await withDefaultIds('<p>A</p><p>B</p><h2>C</h2>')
+    for (const id of ids(editor)) {
+      expect(id).toMatch(/^[0-9a-z]{8}$/)
+      expect(id).toMatch(BLOCK_ID_PATTERN)
+    }
+  })
+
+  it('BLOCK_ID_PATTERN allows 1–64 ASCII letters, digits, _ and -, and nothing else', () => {
+    for (const ok of ['a', 'A-b_9', 'x'.repeat(64)]) expect(ok).toMatch(BLOCK_ID_PATTERN)
+    for (const bad of ['', 'x'.repeat(65), 'has space', 'quo"te', '<script>', 'ñandú', 'a/b', 'a.b']) {
+      expect(bad).not.toMatch(BLOCK_ID_PATTERN)
+    }
+  })
+
+  it('replaces malformed ids in loaded HTML, keeping valid ones', async () => {
+    const editor = await makeEditor(
+      '<p data-block-id="A-b_9">ok</p><p data-block-id="has space">1</p><p data-block-id="&quot;&gt;&lt;x">2</p>'
+      + `<p data-block-id="${'x'.repeat(65)}">3</p><p data-block-id="">4</p>`,
+    )
+    expect(ids(editor)).toEqual(['A-b_9', 'id1', 'id2', 'id3', 'id4'])
+    expect(editor.getHTML()).not.toContain('has space')
+  })
+
+  it('replaces malformed ids in JSON content and in pasted HTML', async () => {
+    const editor = await makeEditor({
+      type: 'doc',
+      content: [{ type: 'paragraph', attrs: { blockId: 'bad id' }, content: [{ type: 'text', text: 'One' }] }],
+    })
+    expect(ids(editor)).toEqual(['id1'])
+    editor.commands.insertContentAt(editor.state.doc.content.size, '<p data-block-id="ñandú">Pasted</p>')
+    expect(ids(editor)).toEqual(['id1', 'id2'])
+  })
+
+  it('falls back to default ids (and warns once) when generateId keeps repeating itself, instead of hanging', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const editor = await makeEditor('<p>A</p><p>B</p><p>C</p>', { blockId: { generateId: () => 'same' } })
+      const all = ids(editor)
+      expect(all[0]).toBe('same')
+      expect(new Set(all).size).toBe(3)
+      all.forEach((id) => expect(id).toMatch(BLOCK_ID_PATTERN))
+      editor.chain().setTextSelection(2).splitBlock().run()
+      expectUniqueIds(editor)
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(warn.mock.calls[0][0]).toContain('generateId() kept returning ids')
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('falls back to default ids when generateId returns malformed ids', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const editor = await makeEditor('<p>A</p>', { blockId: { generateId: () => 'not valid!' } })
+      expect(ids(editor)[0]).toMatch(/^[0-9a-z]{8}$/)
+      expect(warn).toHaveBeenCalledTimes(1)
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('warns once per editor, not once per page', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      await makeEditor('<p>A</p><p>B</p>', { blockId: { generateId: () => 'same' } })
+      await makeEditor('<p>A</p><p>B</p>', { blockId: { generateId: () => 'same' } })
+      expect(warn).toHaveBeenCalledTimes(2)
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('accepts a generator that succeeds within a few retries without warning', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const queue = ['bad id', 'taken', 'fine']
+      const editor = await makeEditor('<p data-block-id="taken">A</p><p>B</p>', { blockId: { generateId: () => queue.shift() ?? 'z' } })
+      expect(ids(editor)).toEqual(['taken', 'fine'])
+      expect(warn).not.toHaveBeenCalled()
+    } finally {
+      warn.mockRestore()
+    }
   })
 })
 

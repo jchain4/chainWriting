@@ -11,13 +11,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `BlocksChange.blocks` — `onBlocksChange` now also delivers the added and updated blocks themselves (in reading order), so incremental analysis no longer needs a full `getBlocks()` on every change.
 - `getBlocks(ids?)` on `EditorHandle` (and a third `ids` argument on the standalone `getBlocks(doc, types?, ids?)`) — returns only the given blocks, in reading order, extracting only their text and stopping as soon as all are found.
 - `setAnnotations(layer, list, { whileEditing: 'track' })` — a per-layer mode where marks stretch or shrink with edits inside them and stay active (their `quote` updated to the new text), instead of turning stale. Meant for layers the host recomputes anyway, so marks don't flicker in between. The mode sticks to the layer until changed or the layer is cleared; the default (`'stale'`) is unchanged.
+- `BLOCK_ID_PATTERN` export — the format every block id matches (1–64 ASCII letters, digits, `_` or `-`; default ids are 8 characters of `[0-9a-z]`), documented together with how to allow `data-block-id` through a host HTML sanitizer.
+- `UploadableImage` is now exported, so the types of its commands (`insertPendingImage`, `resolveImageUpload`, `rejectImageUpload`) reach consumers' TypeScript without redeclaring them.
 - A one-time `console.warn` when `setAnnotations()` or `addSuggestions()` is called before the editor is ready, instead of silently doing nothing.
 
 ### Changed
 - Quote matching (`findQuote`, used by annotations and suggestions) now prefers whole-word occurrences: without context, `"casa"` resolves to the word *casa* rather than the start of an earlier *casas* (it still falls back to the latter if no whole-word *casa* exists). Hosts relying on the old "first substring occurrence" rule may see some annotations resolve to a later occurrence.
 - `prefix`/`suffix` context is now scored by how many characters match, counted outwards from the quote, instead of all-or-nothing — so a long prefix that differs far from the quote still picks the right occurrence.
 
+- Malformed block ids (not matching `BLOCK_ID_PATTERN`) in loaded HTML/JSON or pasted content are now replaced with fresh ids instead of kept as-is.
+
 ### Fixed
+- A custom `generateId` that kept returning an id already in use (e.g. a constant) hung the editor in an infinite loop. It now gets a few retries, then falls back to default ids with a one-time warning per editor; malformed ids from it are treated the same way.
+- The published type declarations imported `../editor.css`, which fails type-checking in consumers using `skipLibCheck: false` on TypeScript 6 (TS2882). A declaration for it is now shipped.
 - `findQuote()` looped forever when given an empty quote; it now returns `-1`.
 - The `prefix`/`suffix` documentation said "a partial match still counts", which didn't match the all-or-nothing scoring it had; it now describes the (new) graded scoring accurately.
 - `isReady()` returned `true` slightly before block ids were assigned (between the editor instance being created and Tiptap's `create` event), so annotations or suggestions set at that moment couldn't find their blocks. It now turns `true` at the same moment `onReady` fires.

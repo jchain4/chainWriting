@@ -27,6 +27,13 @@ afterEach(() => {
   while (liveEditors.length) liveEditors.pop()!.destroy()
 })
 
+describe('UploadableImage export', () => {
+  it('is exported from the package entry point (so its command types reach consumers)', async () => {
+    const entry = await import('../index')
+    expect(entry.UploadableImage).toBe(UploadableImage)
+  })
+})
+
 describe('UploadableImage commands', () => {
   it('insertPendingImage inserts an image node carrying data-upload-id', () => {
     const editor = makeEditor()

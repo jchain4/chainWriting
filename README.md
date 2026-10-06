@@ -165,6 +165,8 @@ The image is inserted immediately with a local preview and swapped for the real 
 
 Pasted HTML containing images (e.g. from Google Docs) is parsed independently of `onImageUpload`, since it arrives as `<img>` markup rather than a raw file. Word's clipboard often references images by local file path, which won't resolve in the browser — the rest of a Word paste (text, tables) is unaffected.
 
+`UploadableImage` (the image node behind this) is exported, together with its commands' types — `editor.commands.insertPendingImage({ src, alt?, uploadId })`, `resolveImageUpload(uploadId, src)` and `rejectImageUpload(uploadId)` — for hosts building their own insertion flow (e.g. a custom paste handler) on top of the same preview-then-swap mechanism.
+
 **Tables** come with a small contextual toolbar (add/remove row or column, delete table) that appears whenever the cursor is inside one.
 
 ## Content export & document stats
@@ -238,6 +240,10 @@ Every block of the document — paragraphs, headings, code blocks, images, horiz
 - **Enter** keeps the id with the text: splitting in the middle or at the end leaves it on the first half, while Enter at the very start (opening a line above) leaves it on the text, not the new empty line. A **pasted copy** of an existing block gets a fresh id; changing a block's type (paragraph → heading, code block…) or wrapping it in a list keeps it.
 - **`version`** increases on every document change. If you send blocks off for slow (async) analysis, compare versions when the result comes back to tell whether the document has moved on meanwhile.
 - Ids are assigned right after mount without counting as an edit: no `onChange`/`onBlocksChange` call and no undo step. Content loaded without ids (or via `setContent`) gets fresh random ones.
+
+**Id format.** Default ids are 8 characters of `[0-9a-z]` (e.g. `k3f9a1x2`). Every id — default, custom, loaded or pasted — matches `BLOCK_ID_PATTERN` (exported): 1–64 ASCII letters, digits, `_` or `-`. Ids that don't (malformed values in loaded HTML/JSON or pasted from elsewhere) are replaced with fresh ones, and a custom `generateId` that keeps returning malformed or repeated ids falls back to default ids with a one-time warning.
+
+**If you sanitize HTML** before saving it, allow `data-block-id` on block elements (`p`, `h1`–`h6`, `pre`, `img`, `hr`), restricted to that same pattern — e.g. with OWASP Java HTML Sanitizer: `.allowAttributes("data-block-id").matching(Pattern.compile("[A-Za-z0-9_-]{1,64}")).onElements("p", "h1", "h2", "h3", "pre", "img", "hr")`. If the attribute is stripped, documents still work, but every load gets new random ids — so anything you stored by block id (annotations, comments, analysis results) stops matching after a reload.
 
 The tracked node types and the id generator are configurable by passing your own `BlockId.configure({ types, generateId, onBlocksChange })` via the `extensions` prop (it replaces the built-in one, so wire `onBlocksChange` there instead of on the prop). `getBlocks(doc, types?, ids?)` and `diffBlocks(oldDoc, newDoc)` are also exported as standalone functions over a ProseMirror document.
 

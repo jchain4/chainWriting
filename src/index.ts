@@ -13,6 +13,10 @@ import '@tiptap/extension-table'
 import '@tiptap/suggestion'
 
 export { Editor } from './components/Editor'
+// Exported so its commands' types (insertPendingImage, resolveImageUpload,
+// rejectImageUpload on `editor.commands`) reach consumers' TypeScript, for
+// hosts that build their own image-insertion flows on top of it.
+export { UploadableImage } from './lib/imageExtension'
 export type { EditorProps, EditorHandle } from './components/Editor'
 export {
   htmlToMarkdown,
@@ -28,7 +32,7 @@ export {
 export type { DocumentStats, HeadingOutlineItem } from './lib/exportMarkdown'
 export { createHighlightPlugin, setHighlightRanges } from './lib/highlightPlugin'
 export type { HighlightRange } from './lib/highlightPlugin'
-export { BlockId, getBlocks, diffBlocks, DEFAULT_BLOCK_TYPES } from './lib/blockId'
+export { BlockId, getBlocks, diffBlocks, DEFAULT_BLOCK_TYPES, BLOCK_ID_PATTERN } from './lib/blockId'
 export type { Block, BlocksChange, BlockIdOptions } from './lib/blockId'
 export { Annotations, setAnnotations, clearAnnotations, getAnnotations, findQuote } from './lib/annotations'
 export type {
