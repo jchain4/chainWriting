@@ -115,7 +115,7 @@ function App() {
 | `clear()` | Clear the whole document |
 | `isReady()` | Whether the editor has mounted and every block has its id (the moment `onReady` fires) |
 | `getEditor()` | Escape hatch — the raw Tiptap `Editor` instance, `null` until mounted |
-| `getBlocks()` | The document as a list of blocks with stable ids — see "Blocks" |
+| `getBlocks(ids?)` | The document as a list of blocks with stable ids — or just the given ones — see "Blocks" |
 | `setAnnotations(layer, annotations)` | Mark text by content in a named layer, replacing that layer — see "Annotations" |
 | `clearAnnotations(layer?)` | Remove one layer's annotations, or all of them |
 | `getAnnotations(layer?)` | Current annotations (active and stale) |
@@ -218,13 +218,14 @@ Every block of the document — paragraphs, headings, code blocks, images, horiz
 ```tsx
 <Editor
   ref={editorRef}
-  onBlocksChange={({ added, updated, removed, version }) => {
-    // Re-analyze only what changed, e.g. send just these blocks to your own backend.
-    const changed = new Set([...added, ...updated])
-    const blocks = editorRef.current!.getBlocks().filter((b) => changed.has(b.id))
+  onBlocksChange={({ blocks, removed, version }) => {
+    // `blocks` = the added and updated blocks, already extracted: re-analyze
+    // only these (e.g. send them to your own backend), drop results for `removed`.
   }}
 />
 ```
+
+`onBlocksChange` receives `{ added, updated, removed, blocks, version }`: the ids of each kind of change, plus `blocks` — the added and updated blocks themselves, in reading order — so incremental analysis never has to read the whole document. To read specific blocks at any other time, pass their ids: `getBlocks(['k3f9a1x2', 'p0d81mzq'])` returns just those, in reading order, extracting only their text.
 
 `getBlocks()` returns blocks in reading order:
 
@@ -238,7 +239,7 @@ Every block of the document — paragraphs, headings, code blocks, images, horiz
 - **`version`** increases on every document change. If you send blocks off for slow (async) analysis, compare versions when the result comes back to tell whether the document has moved on meanwhile.
 - Ids are assigned right after mount without counting as an edit: no `onChange`/`onBlocksChange` call and no undo step. Content loaded without ids (or via `setContent`) gets fresh random ones.
 
-The tracked node types and the id generator are configurable by passing your own `BlockId.configure({ types, generateId, onBlocksChange })` via the `extensions` prop (it replaces the built-in one, so wire `onBlocksChange` there instead of on the prop). `getBlocks(doc)` and `diffBlocks(oldDoc, newDoc)` are also exported as standalone functions over a ProseMirror document.
+The tracked node types and the id generator are configurable by passing your own `BlockId.configure({ types, generateId, onBlocksChange })` via the `extensions` prop (it replaces the built-in one, so wire `onBlocksChange` there instead of on the prop). `getBlocks(doc, types?, ids?)` and `diffBlocks(oldDoc, newDoc)` are also exported as standalone functions over a ProseMirror document.
 
 ### When is the editor ready?
 

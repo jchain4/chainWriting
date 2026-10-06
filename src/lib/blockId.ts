@@ -27,6 +27,11 @@ export interface BlocksChange {
   updated: string[]
   /** Ids of blocks that no longer exist. */
   removed: string[]
+  /**
+   * The added and updated blocks themselves, in reading order — so the host
+   * can re-analyze them without reading the whole document again.
+   */
+  blocks: Block[]
   /** Increments on every document change — lets async consumers detect that their results are stale. */
   version: number
 }
@@ -110,16 +115,28 @@ function assignIds(
   }
 }
 
-/** Lists the document's blocks in reading order. */
-export function getBlocks(doc: ProseMirrorNode, types: string[] = DEFAULT_BLOCK_TYPES): Block[] {
+/**
+ * Lists the document's blocks in reading order. With `ids`, only those
+ * blocks (still in reading order; unknown ids are ignored) — only their text
+ * is extracted, and the walk stops as soon as all of them are found.
+ */
+export function getBlocks(
+  doc: ProseMirrorNode,
+  types: string[] = DEFAULT_BLOCK_TYPES,
+  ids?: Iterable<string>,
+): Block[] {
   const typeSet = new Set(types)
+  const wanted = ids ? new Set(ids) : null
+  let remaining = wanted ? wanted.size : Infinity
   const blocks: Block[] = []
 
   const walk = (node: ProseMirrorNode, ancestors: string[]) => {
-    node.forEach((child) => {
+    for (let i = 0; i < node.childCount && remaining > 0; i++) {
+      const child = node.child(i)
       if (isTracked(child, typeSet)) {
         const { [ATTR]: id, ...attrs } = child.attrs
-        if (!id) return
+        if (!id || (wanted && !wanted.has(id as string))) continue
+        remaining -= 1
         blocks.push({
           id: id as string,
           type: child.type.name,
@@ -130,7 +147,7 @@ export function getBlocks(doc: ProseMirrorNode, types: string[] = DEFAULT_BLOCK_
       } else if (!child.isTextblock && !child.isLeaf) {
         walk(child, [...ancestors, child.type.name])
       }
-    })
+    }
   }
   walk(doc, [])
   return blocks
@@ -156,7 +173,7 @@ export function diffBlocks(
   oldDoc: ProseMirrorNode,
   newDoc: ProseMirrorNode,
   types: string[] = DEFAULT_BLOCK_TYPES,
-): Omit<BlocksChange, 'version'> {
+): Omit<BlocksChange, 'version' | 'blocks'> {
   const typeSet = new Set(types)
   const before = collectBlockNodes(oldDoc, typeSet)
   const after = collectBlockNodes(newDoc, typeSet)
@@ -246,6 +263,8 @@ export const BlockId = Extension.create<BlockIdOptions, BlockIdStorage>({
     this.storage.version += 1
     const change = diffBlocks(lastDoc, doc, this.options.types)
     if (!change.added.length && !change.updated.length && !change.removed.length) return
-    this.options.onBlocksChange?.({ ...change, version: this.storage.version })
+    if (!this.options.onBlocksChange) return
+    const blocks = getBlocks(doc, this.options.types, [...change.added, ...change.updated])
+    this.options.onBlocksChange({ ...change, blocks, version: this.storage.version })
   },
 })

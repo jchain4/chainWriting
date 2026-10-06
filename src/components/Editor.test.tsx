@@ -79,6 +79,11 @@ describe('Editor', () => {
     expect(ref.current!.getHTML()).toContain('<p>Body</p>')
   })
 
+  it('getBlocks(ids) on the ref handle returns just those blocks', async () => {
+    const { ref } = await renderReadyEditor({ initialContent: '<p data-block-id="a">A</p><p data-block-id="b">B</p><p data-block-id="c">C</p>' })
+    expect(ref.current!.getBlocks(['c', 'a']).map((b) => b.text)).toEqual(['A', 'C'])
+  })
+
   it('sets, reads and clears annotations through the ref handle', async () => {
     const { ref, container } = await renderReadyEditor({ initialContent: '<p data-block-id="a">The quick fox</p>' })
     await waitFor(() => expect(ref.current!.getBlocks()).toHaveLength(1))

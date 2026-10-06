@@ -142,9 +142,10 @@ export interface EditorHandle {
   getEditor: () => TiptapEditor | null
   /**
    * The document as a list of blocks in reading order, each with a stable id
-   * (also rendered as `data-block-id` in getHTML()). Empty until mounted.
+   * (also rendered as `data-block-id` in getHTML()). With `ids`, only those
+   * blocks (in reading order; unknown ids are ignored). Empty until mounted.
    */
-  getBlocks: () => Block[]
+  getBlocks: (ids?: string[]) => Block[]
   /**
    * Marks text by content — `{ id, blockId, quote }` = "the phrase `quote`
    * in block `blockId`" — replacing every annotation previously set in
@@ -1096,11 +1097,11 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     if (initialContent) onChange?.(initialContent)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const readBlocks = useCallback((): Block[] => {
+  const readBlocks = useCallback((ids?: string[]): Block[] => {
     if (!editor) return []
     // Honor a host-reconfigured BlockId (custom `types`) passed via `extensions`.
     const blockId = editor.extensionManager.extensions.find((e) => e.name === 'blockId')
-    return getBlocks(editor.state.doc, (blockId?.options as BlockIdOptions | undefined)?.types)
+    return getBlocks(editor.state.doc, (blockId?.options as BlockIdOptions | undefined)?.types, ids)
   }, [editor])
 
   // Tied to the instance, so a replaced editor isn't ready until it's created too.

@@ -284,7 +284,10 @@ describe('onBlocksChange', () => {
   it('reports a typed-in block as updated', async () => {
     const { editor, last } = await tracked(TWO_PARAGRAPHS)
     editor.commands.insertContentAt(4, '!')
-    expect(last()).toEqual({ added: [], updated: ['a'], removed: [], version: 1 })
+    expect(last()).toEqual({
+      added: [], updated: ['a'], removed: [], version: 1,
+      blocks: [{ id: 'a', type: 'paragraph', text: 'One!', attrs: {}, ancestors: [] }],
+    })
   })
 
   it('reports formatting and attribute changes as updates', async () => {
@@ -352,6 +355,30 @@ describe('onBlocksChange', () => {
     expect(last()).toMatchObject({ updated: ['b'], version: 2 })
   })
 
+  it('includes the added and updated blocks themselves, in reading order, but not removed ones', async () => {
+    const { editor, last } = await tracked('<p data-block-id="a">HelloWorld</p><p data-block-id="b">Two</p><p data-block-id="c">Three</p>')
+    editor.commands.command(({ tr }) => {
+      tr.delete(editor.state.doc.child(0).nodeSize, editor.state.doc.child(0).nodeSize + editor.state.doc.child(1).nodeSize)
+      tr.split(6)
+      return true
+    })
+    const change = last()!
+    expect(change).toMatchObject({ updated: ['a'], added: ['id1'], removed: ['b'] })
+    expect(change.blocks.map((b) => [b.id, b.text])).toEqual([['a', 'Hello'], ['id1', 'World']])
+  })
+
+  it('includes nested blocks with their ancestors', async () => {
+    const { editor, last } = await tracked('<ul><li><p data-block-id="li">Item</p></li></ul><p data-block-id="end">End</p>')
+    editor.commands.insertContentAt(3, 'My ')
+    expect(last()!.blocks).toEqual([{ id: 'li', type: 'paragraph', text: 'My Item', attrs: {}, ancestors: ['bulletList', 'listItem'] }])
+  })
+
+  it('has no blocks when the change only removed blocks', async () => {
+    const { editor, last } = await tracked(TWO_PARAGRAPHS)
+    editor.commands.deleteRange({ from: 0, to: 5 })
+    expect(last()).toMatchObject({ removed: ['a'], blocks: [] })
+  })
+
   it('increments the version by one per change', async () => {
     const { editor, onBlocksChange } = await tracked(TWO_PARAGRAPHS)
     editor.commands.insertContentAt(4, '1')
@@ -399,6 +426,35 @@ describe('getBlocks', () => {
     const { schema } = editor
     const doc = schema.node('doc', null, [schema.node('paragraph', null, schema.text('No id'))])
     expect(getBlocks(doc)).toEqual([])
+  })
+
+  it('returns only the requested ids, in reading order whatever the order asked', async () => {
+    const editor = await makeEditor('<p data-block-id="a">A</p><ul><li><p data-block-id="b">B</p></li></ul><p data-block-id="c">C</p>')
+    expect(getBlocks(editor.state.doc, undefined, ['c', 'a']).map((b) => b.id)).toEqual(['a', 'c'])
+    expect(getBlocks(editor.state.doc, undefined, ['b'])).toEqual([
+      { id: 'b', type: 'paragraph', text: 'B', attrs: {}, ancestors: ['bulletList', 'listItem'] },
+    ])
+  })
+
+  it('ignores unknown ids and returns nothing for an empty id list', async () => {
+    const editor = await makeEditor(TWO_PARAGRAPHS)
+    expect(getBlocks(editor.state.doc, undefined, ['ghost', 'b', 'b']).map((b) => b.id)).toEqual(['b'])
+    expect(getBlocks(editor.state.doc, undefined, [])).toEqual([])
+  })
+
+  it('finds the last nested block when asked for it (the early stop does not skip it)', async () => {
+    const editor = await makeEditor(
+      '<p data-block-id="a">A</p><blockquote><ul><li><p data-block-id="deep">Deep</p></li></ul></blockquote><p data-block-id="z">Z</p>',
+    )
+    expect(getBlocks(editor.state.doc, undefined, ['a', 'deep']).map((b) => b.id)).toEqual(['a', 'deep'])
+    expect(getBlocks(editor.state.doc, undefined, ['deep', 'z']).map((b) => b.id)).toEqual(['deep', 'z'])
+  })
+
+  it('only extracts the text of the requested blocks', async () => {
+    const editor = await makeEditor(TWO_PARAGRAPHS)
+    const spy = vi.spyOn(editor.state.doc.child(1), 'textBetween')
+    getBlocks(editor.state.doc, undefined, ['a'])
+    expect(spy).not.toHaveBeenCalled()
   })
 
   it('only lists the requested types', async () => {
