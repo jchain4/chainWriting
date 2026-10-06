@@ -75,6 +75,58 @@ describe('findQuote', () => {
   it('finds overlapping occurrences', () => {
     expect(findQuote('aaa', 'aa', 'a')).toBe(1)
   })
+
+  it('returns -1 for an empty quote instead of looping forever', () => {
+    expect(findQuote('some text', '')).toBe(-1)
+    expect(findQuote('', '')).toBe(-1)
+  })
+
+  it('prefers a whole-word occurrence over one inside a longer word', () => {
+    expect(findQuote('Las casas y la casa', 'casa')).toBe(15)
+    expect(findQuote('la casa y las casas', 'casa')).toBe(3)
+    expect(findQuote('encasado, casa', 'casa')).toBe(10)
+  })
+
+  it('still finds a quote that only appears inside a longer word', () => {
+    expect(findQuote('Las casas', 'casa')).toBe(4)
+    expect(findQuote('Las casas', 'asa')).toBe(5)
+  })
+
+  it('treats accented letters, ñ and digits as part of words', () => {
+    expect(findQuote('añoranza, año', 'año')).toBe(10)
+    expect(findQuote('canción y canci', 'canci')).toBe(10)
+    expect(findQuote('2024 y 20', '20')).toBe(7)
+  })
+
+  it('treats punctuation and spaces as word boundaries', () => {
+    expect(findQuote('casas, casa.', 'casa')).toBe(7)
+    expect(findQuote('(casa) casas', 'casa')).toBe(1)
+    expect(findQuote('casas\ncasa', 'casa')).toBe(6)
+  })
+
+  it('does not require a word boundary at quote edges that are themselves punctuation', () => {
+    expect(findQuote('dos, tres, cuatro', ', tres')).toBe(3)
+    expect(findQuote('abc.def', '.')).toBe(3)
+    // The first ", b" is glued to "bb" at its end; the second is a whole word. The
+    // letters before each comma don't matter, since the quote starts with punctuation.
+    expect(findQuote('x, bb y, b', ', b')).toBe(7)
+  })
+
+  it('scores context by how many characters match next to the quote, not all-or-nothing', () => {
+    const text = 'Primero el gato negro. Después el gato blanco.'
+    // A long prefix that differs only far from the quote still points at the second "gato".
+    expect(findQuote(text, 'gato', 'XXXXXXXXXX. Después el ')).toBe(34)
+    expect(findQuote(text, 'gato', undefined, ' blancX')).toBe(34)
+  })
+
+  it('lets matching context win over the whole-word preference', () => {
+    expect(findQuote('casa, las casas', 'casa', 'las ')).toBe(10)
+  })
+
+  it('counts prefix and suffix matches together', () => {
+    const text = 'a x b. c x d. a x d.'
+    expect(findQuote(text, 'x', 'a ', ' d')).toBe(16)
+  })
 })
 
 describe('setAnnotations — resolving', () => {
@@ -109,6 +161,12 @@ describe('setAnnotations — resolving', () => {
     ])
     expect(results.map((a) => a.status)).toEqual(['active', 'active', 'active', 'active', 'active'])
     expect(results.map((a) => textOf(editor, a))).toEqual(['bold italic', 'two', 'one\nline', 'item', 'cell'])
+  })
+
+  it('resolves a quote to the whole word rather than inside a longer one', async () => {
+    const editor = await makeEditor('<p data-block-id="a">Las casas y la casa</p>')
+    const [a] = setAnnotations(editor, 'test', [{ id: 'x', blockId: 'a', quote: 'casa' }])
+    expect(a.from).toBe(1 + 'Las casas y la '.length)
   })
 
   it('uses prefix/suffix to pick the right occurrence in the block', async () => {

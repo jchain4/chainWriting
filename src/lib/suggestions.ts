@@ -21,7 +21,7 @@ export interface ReplaceSuggestion extends SuggestionBase {
   type: 'replace'
   blockId: string
   quote: string
-  /** Text right before/after the quote, to pick the right one when it repeats in the block. */
+  /** Text right before/after the quote, to pick the right one when it repeats in the block (scored like Annotation's). */
   prefix?: string
   suffix?: string
   replacement: string

@@ -10,7 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `onReady` prop — called once when the editor has mounted and every block has its id, with the initial blocks. The ref handle is usable inside it, so hosts no longer need to poll `isReady()` before calling `setAnnotations()`/`addSuggestions()`.
 - A one-time `console.warn` when `setAnnotations()` or `addSuggestions()` is called before the editor is ready, instead of silently doing nothing.
 
+### Changed
+- Quote matching (`findQuote`, used by annotations and suggestions) now prefers whole-word occurrences: without context, `"casa"` resolves to the word *casa* rather than the start of an earlier *casas* (it still falls back to the latter if no whole-word *casa* exists). Hosts relying on the old "first substring occurrence" rule may see some annotations resolve to a later occurrence.
+- `prefix`/`suffix` context is now scored by how many characters match, counted outwards from the quote, instead of all-or-nothing — so a long prefix that differs far from the quote still picks the right occurrence.
+
 ### Fixed
+- `findQuote()` looped forever when given an empty quote; it now returns `-1`.
+- The `prefix`/`suffix` documentation said "a partial match still counts", which didn't match the all-or-nothing scoring it had; it now describes the (new) graded scoring accurately.
 - `isReady()` returned `true` slightly before block ids were assigned (between the editor instance being created and Tiptap's `create` event), so annotations or suggestions set at that moment couldn't find their blocks. It now turns `true` at the same moment `onReady` fires.
 
 ## [0.4.0] - 2026-10-05

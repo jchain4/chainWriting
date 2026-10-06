@@ -40,16 +40,49 @@ export function lazyBlockIndex(doc: ProseMirrorNode): BlockLookup {
 
 export const blockText = (node: ProseMirrorNode) => node.textBetween(0, node.content.size, '\n', '\n')
 
-/** Offset of the best occurrence of `quote` in `text`, or -1. */
+const WORD_CHAR = /[\p{L}\p{N}\p{M}]/u
+const isWordChar = (char: string | undefined) => !!char && WORD_CHAR.test(char)
+
+/** How many characters of `text` right before `index` match the end of `prefix`. */
+function matchBefore(text: string, index: number, prefix: string): number {
+  let n = 0
+  while (n < index && n < prefix.length && text[index - 1 - n] === prefix[prefix.length - 1 - n]) n++
+  return n
+}
+
+/** How many characters of `text` from `index` on match the start of `suffix`. */
+function matchAfter(text: string, index: number, suffix: string): number {
+  let n = 0
+  while (index + n < text.length && n < suffix.length && text[index + n] === suffix[n]) n++
+  return n
+}
+
+/**
+ * Offset of the best occurrence of `quote` in `text`, or -1 (also for an
+ * empty quote). Occurrences are ranked by, in order:
+ * 1. Context: how many characters of `prefix` match the text right before
+ *    the occurrence, plus how many of `suffix` match right after it —
+ *    counted outwards from the quote, so a long prefix that differs only
+ *    far from the quote still points at the right occurrence.
+ * 2. Whole words: an occurrence that isn't part of a longer word ("casa" on
+ *    its own rather than inside "casas") wins over one that is.
+ * 3. Position: the first one.
+ */
 export function findQuote(text: string, quote: string, prefix?: string, suffix?: string): number {
+  if (!quote) return -1
   let best = -1
-  let bestScore = -1
+  let bestContext = -1
+  let bestWhole = false
   for (let i = text.indexOf(quote); i !== -1; i = text.indexOf(quote, i + 1)) {
-    const score = (prefix && text.slice(0, i).endsWith(prefix) ? 1 : 0)
-      + (suffix && text.slice(i + quote.length).startsWith(suffix) ? 1 : 0)
-    if (score > bestScore) {
+    const end = i + quote.length
+    const context = (prefix ? matchBefore(text, i, prefix) : 0) + (suffix ? matchAfter(text, end, suffix) : 0)
+    // A quote edge that is itself punctuation/space can't be glued to a word.
+    const whole = !(isWordChar(quote[0]) && isWordChar(text[i - 1]))
+      && !(isWordChar(quote[quote.length - 1]) && isWordChar(text[end]))
+    if (context > bestContext || (context === bestContext && whole && !bestWhole)) {
       best = i
-      bestScore = score
+      bestContext = context
+      bestWhole = whole
     }
   }
   return best

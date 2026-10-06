@@ -277,7 +277,7 @@ const results = editorRef.current!.setAnnotations('style', [
 ```
 
 - **Layers** (`'spelling'`, `'style'`, `'comments'`…) are independent: `setAnnotations(layer, list)` replaces only that layer; `clearAnnotations(layer?)` removes one or all.
-- **Repeated phrases**: pass `prefix`/`suffix` (the text right before/after) to pick the right occurrence. Without them, the first occurrence in the block is used.
+- **Repeated phrases**: pass `prefix`/`suffix` (the text right before/after) to pick the right occurrence. Context needn't match exactly: it's scored by how many characters match, counted outwards from the quote, and the best-scoring occurrence wins. On a tie — or with no context at all — a whole-word occurrence wins (`"casa"` matches the word *casa*, not the start of *casas*, unless no whole-word *casa* exists), then the first one. The same matcher is exported as `findQuote(text, quote, prefix?, suffix?)`.
 - **While the user edits**, annotations follow their text — through typing elsewhere, Enter, and joining paragraphs (their `blockId` is updated if the text moves to another block). Typing right at the edge of a marked phrase doesn't stretch the mark.
 - **Stale**: when the marked text itself changes or disappears (e.g. the user rewrote the flagged phrase), the annotation becomes `stale` — unmarked, but kept. If the text comes back (undo, or retyped), it becomes `active` again. Both transitions are reported through `onAnnotationStatusChange`; changes caused by the host's own `setAnnotations`/`clearAnnotations` calls aren't.
 - **Events**: `onAnnotationClick` receives every active annotation under the click (they can overlap) and never prevents normal cursor placement. `onAnnotationHover` fires once per change, with `[]` when the pointer leaves.

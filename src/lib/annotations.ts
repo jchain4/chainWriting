@@ -26,9 +26,11 @@ export interface Annotation {
   quote?: string
   /**
    * Optional text right before/after the quote, to pick the right one when
-   * the quote appears several times in the block. A partial match still
-   * counts: the occurrence matching most of the given context wins, and with
-   * no context the first occurrence wins.
+   * the quote appears several times in the block. Context is scored by how
+   * many characters match, counted outwards from the quote, so it needn't
+   * match exactly: the occurrence matching the most wins. Ties (including no
+   * context at all) go to an occurrence that is a whole word — "casa" rather
+   * than the start of "casas" — and then to the first one.
    */
   prefix?: string
   suffix?: string
