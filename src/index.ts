@@ -17,6 +17,7 @@ export { Editor } from './components/Editor'
 // rejectImageUpload on `editor.commands`) reach consumers' TypeScript, for
 // hosts that build their own image-insertion flows on top of it.
 export { UploadableImage } from './lib/imageExtension'
+export { InsertionCursor } from './lib/insertionCursor'
 export type { EditorProps, EditorHandle } from './components/Editor'
 export {
   htmlToMarkdown,

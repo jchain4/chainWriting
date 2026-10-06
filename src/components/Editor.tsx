@@ -13,6 +13,7 @@ import TableHeader from '@tiptap/extension-table-header'
 import { TextSelection } from '@tiptap/pm/state'
 import type { AnyExtension, Content, Editor as TiptapEditor, JSONContent } from '@tiptap/react'
 import { mergeExtensions } from '../lib/extensions'
+import { InsertionCursor } from '../lib/insertionCursor'
 import { BlockId, getBlocks, type Block, type BlockIdOptions, type BlocksChange } from '../lib/blockId'
 import {
   Annotations, setAnnotations, clearAnnotations, getAnnotations,
@@ -898,6 +899,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
         TableCell,
         TableHeader,
         slashExtension,
+        InsertionCursor,
         BlockId.configure({ onBlocksChange: (change) => onBlocksChangeRef.current?.(change) }),
         Annotations.configure({
           onClick: (annotations, event) => annotationHandlersRef.current.onAnnotationClick?.(annotations, event),

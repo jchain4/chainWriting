@@ -167,6 +167,8 @@ Pasted HTML containing images (e.g. from Google Docs) is parsed independently of
 
 `UploadableImage` (the image node behind this) is exported, together with its commands' types — `editor.commands.insertPendingImage({ src, alt?, uploadId })`, `resolveImageUpload(uploadId, src)` and `rejectImageUpload(uploadId)` — for hosts building their own insertion flow (e.g. a custom paste handler) on top of the same preview-then-swap mechanism.
 
+After an image or horizontal rule is inserted — pasted, picked from the `/` menu, or uploaded — the cursor lands on the first text position after it (opening an empty paragraph there if there's none), so the next keystroke continues the text instead of replacing the node. Clicking a node, dropping a dragged one, and undo/redo still select it as before. To keep inserted nodes selected instead, override the `InsertionCursor` extension by name: `extensions={[Extension.create({ name: 'insertionCursor' })]}`.
+
 **Tables** come with a small contextual toolbar (add/remove row or column, delete table) that appears whenever the cursor is inside one.
 
 ## Content export & document stats

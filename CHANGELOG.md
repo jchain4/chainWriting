@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Malformed block ids (not matching `BLOCK_ID_PATTERN`) in loaded HTML/JSON or pasted content are now replaced with fresh ids instead of kept as-is.
 
 ### Fixed
+- After inserting an image or horizontal rule — by pasting HTML that ends in one, through the `/` menu, or by uploading a file — the node was left selected, so the next keystroke replaced it. The cursor now lands right after it (in an empty paragraph opened there if needed), as part of the same undo step. Selecting a node by clicking, dropping a dragged node, and undo/redo are unchanged. Implemented as the `InsertionCursor` extension (exported; override it by name to opt out).
 - A custom `generateId` that kept returning an id already in use (e.g. a constant) hung the editor in an infinite loop. It now gets a few retries, then falls back to default ids with a one-time warning per editor; malformed ids from it are treated the same way.
 - The published type declarations imported `../editor.css`, which fails type-checking in consumers using `skipLibCheck: false` on TypeScript 6 (TS2882). A declaration for it is now shipped.
 - `findQuote()` looped forever when given an empty quote; it now returns `-1`.
