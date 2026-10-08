@@ -97,6 +97,12 @@
 .cw-slash-menu {
   font-size: medium;
   --cw-u: calc(1em / 16 * var(--cw-ui-scale, 1));
+  /* Size to the content. Fixed-position with a `left`, they'd otherwise
+     shrink to the room between that edge and the viewport's right edge —
+     wrapping a menu that fits, the more so the further right it opens,
+     before useKeepInViewport moves it. Each one's max-width still makes it
+     wrap when it really doesn't fit the screen. */
+  width: max-content;
 }
 
 /* Padding defaults depend on the surface (framed surfaces need more room).
@@ -331,6 +337,7 @@
 /* ── Slash command menu ── */
 
 .cw-slash-menu {
+  max-width: calc(100vw - 16px);
   display: flex;
   flex-direction: column;
   min-width: calc(160 * var(--cw-u));

@@ -994,6 +994,12 @@ describe('Editor', () => {
           expect(declaration, selector.trim()).not.toMatch(/\d+px/)
         }
       }
+      // Floating menus size to their content, not to the room between their
+      // left edge and the viewport's right edge (fixed + left = shrink-to-fit
+      // would wrap a menu that fits, the more so the further right it opens);
+      // max-width still makes them wrap when they really don't fit.
+      expect(css).toMatch(/\.cw-bubble-menu,\s*\.cw-link-popover,\s*\.cw-slash-menu \{[^}]*width: max-content;/)
+      expect(css).toMatch(/\.cw-bubble-menu \{[^}]*max-width: calc\(100vw - 16px\);/)
       // Forced colours (Windows High Contrast) drop box shadows: real outlines instead.
       const forced = css.slice(css.indexOf('@media (forced-colors: active)'))
       expect(forced).toMatch(/\.cw-editor \.ProseMirror:focus \{\s*outline: 2px solid Highlight;/)

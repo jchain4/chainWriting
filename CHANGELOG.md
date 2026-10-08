@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 - Ctrl+K did nothing when pressed right after selecting text (Shift+Home, a double click…), since 0.5.0 at least: the browser had the new selection, but the editor only learns about it from the `selectionchange` event, which can arrive *after* the next keydown — so the shortcut saw an empty selection. Ctrl+K is now handled by the editor's own key handling and reads the selection from the browser first. (It also no longer needs a page-wide `keydown` listener.)
 - The bubble menu was placed above the selection using an assumed height (36px), since it didn't exist yet when first placed: it jumped a few pixels on the first scroll, and when it was taller — wrapped onto several lines on a phone, or with `--cw-ui-scale` above 1 — it covered the text just selected. It's now measured once mounted, before it's painted, and placed again if needed.
+- On narrow screens the bubble menu wrapped onto two or three lines even when it fit on one — the more so the further right the selection was. Being fixed-position with a `left`, the floating menus shrank to the room between that edge and the viewport's right edge. They're now sized to their content (`width: max-content`), and still wrap when they really don't fit. Also applies to the link popover and the `/` menu.
 - The link popover's opening code swallowed any error in an empty `catch`; it now logs it with `console.error`.
 
 ## [0.6.0] - 2026-10-07
