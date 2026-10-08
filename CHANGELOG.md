@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-08
+
 ### Fixed
 - Ctrl+K did nothing when pressed right after selecting text (Shift+Home, a double click…), since 0.5.0 at least: the browser had the new selection, but the editor only learns about it from the `selectionchange` event, which can arrive *after* the next keydown — so the shortcut saw an empty selection. Ctrl+K is now handled by the editor's own key handling and reads the selection from the browser first. (It also no longer needs a page-wide `keydown` listener.)
 - The bubble menu was placed above the selection using an assumed height (36px), since it didn't exist yet when first placed: it jumped a few pixels on the first scroll, and when it was taller — wrapped onto several lines on a phone, or with `--cw-ui-scale` above 1 — it covered the text just selected. It's now measured once mounted, before it's painted, and placed again if needed.
