@@ -3,7 +3,7 @@
 import { Fragment, forwardRef, useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, RefObject } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
-import { getHTMLFromFragment } from '@tiptap/core'
+import { getHTMLFromFragment, type TiptapEditorHTMLElement } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Typography from '@tiptap/extension-typography'
@@ -16,6 +16,7 @@ import type { AnyExtension, Content, Editor as TiptapEditor, JSONContent } from 
 import { mergeExtensions } from '../lib/extensions'
 import { InsertionCursor } from '../lib/insertionCursor'
 import { centerVertically } from '../lib/scrolling'
+import { syncSelectionFromDOM } from '../lib/selection'
 import { menuThemeFor } from '../lib/color'
 import { resolveFeatures, starterKitOptions, type EditorFeatures, type ResolvedFeatures } from '../lib/features'
 import { BlockId, getBlocks, type Block, type BlockIdOptions, type BlocksChange } from '../lib/blockId'
@@ -992,7 +993,11 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     try {
       const initialUrl = (ed.getAttributes('link').href as string) ?? ''
       setLinkState({ ...linkPosition(ed, from, to), from, to, initialUrl, hasSelection: from !== to })
-    } catch {}
+    } catch (error) {
+      // Only if the selection can't be measured (e.g. the editor is being
+      // torn down) — never silently: a popover that doesn't open is a bug.
+      console.error('chain-writing: could not open the link popover', error)
+    }
   }, [linkPosition])
 
   const slashItems = useMemo<SlashCommandItem[]>(() => ([
@@ -1132,6 +1137,20 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
       },
       handleKeyDown: (view, event) => {
         if (event.key !== 'Tab' && event.key !== 'Shift') setKeyboardFocus(false)
+        // Ctrl+K: link popover on the selected text, or on the link under the
+        // cursor. An editor key handler, so it only ever runs in the editor
+        // being written in. A selection made a moment ago (Shift+Home, a
+        // double click) may exist in the browser but not yet in the editor's
+        // state, so read it from the browser first.
+        if (
+          enabled.links && event.key.toLowerCase() === 'k'
+          && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey
+        ) {
+          syncSelectionFromDOM(view)
+          const ed = (view.dom as TiptapEditorHTMLElement).editor
+          if (ed && (!view.state.selection.empty || ed.isActive('link'))) openLink(ed)
+          return true
+        }
         if (
           event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey
           && onSubmitRef.current
@@ -1299,24 +1318,6 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     chain.focus().run()
     setLinkState(null)
   }, [editor, linkState])
-
-  // Ctrl+K: open link popover on selected text or when cursor is on a link
-  useEffect(() => {
-    if (!editor) return
-    if (!enabled.links) return
-    const handler = (e: KeyboardEvent) => {
-      // Only the editor being written in: never hijack Ctrl+K for the rest of
-      // the page, nor for the other editors on it (e.g. a list of comments).
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k' && editor.view.hasFocus()) {
-        e.preventDefault()
-        if (!editor.state.selection.empty || editor.isActive('link')) {
-          openLink(editor)
-        }
-      }
-    }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [editor, openLink, enabled.links])
 
   // Fire onChange once on mount so the host has the initial HTML
   useEffect(() => {

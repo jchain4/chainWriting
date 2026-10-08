@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- Ctrl+K did nothing when pressed right after selecting text (Shift+Home, a double click…), since 0.5.0 at least: the browser had the new selection, but the editor only learns about it from the `selectionchange` event, which can arrive *after* the next keydown — so the shortcut saw an empty selection. Ctrl+K is now handled by the editor's own key handling and reads the selection from the browser first. (It also no longer needs a page-wide `keydown` listener.)
+- The link popover's opening code swallowed any error in an empty `catch`; it now logs it with `console.error`.
+
 ## [0.6.0] - 2026-10-07
 
 ### Added

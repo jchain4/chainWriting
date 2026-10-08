@@ -564,9 +564,10 @@ describe('Editor', () => {
   })
 
   describe('Ctrl+K', () => {
+    /** Ctrl+K as a browser sends it: to whatever has focus (or the page). */
     const ctrlK = () => {
       const event = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true, cancelable: true })
-      document.dispatchEvent(event)
+      ;(document.activeElement ?? document.body).dispatchEvent(event)
       return event
     }
 
@@ -588,6 +589,61 @@ describe('Editor', () => {
         await waitFor(() => expect(second.container.querySelector('.cw-link-popover')).toBeInTheDocument())
         expect(first.container.querySelector('.cw-link-popover')).toBeNull()
       } finally {
+        ;(document.activeElement as HTMLElement | null)?.blur()
+        window.getSelection()?.removeAllRanges()
+        restore()
+      }
+    })
+
+    it('opens the link popover when Ctrl+K comes right after a keyboard selection the editor has not synced yet', async () => {
+      // The browser changes the DOM selection at once (Shift+Home, double
+      // click…) but ProseMirror only reads it on the next selectionchange:
+      // a fast Ctrl+K arrives while the editor still has the old, empty one.
+      const restore = mockSelectionRect()
+      try {
+        const { ref, container } = await renderReadyEditor({ initialContent: '<p>Una palabra</p>' })
+        const editor = ref.current!.getEditor()!
+        editor.commands.focus('end')
+        await waitFor(() => expect(document.activeElement).toBe(editor.view.dom))
+        expect(editor.state.selection.empty).toBe(true)
+
+        const text = editor.view.dom.querySelector('p')!.firstChild!
+        const range = document.createRange()
+        range.setStart(text, 0)
+        range.setEnd(text, text.textContent!.length)
+        const domSelection = window.getSelection()!
+        domSelection.removeAllRanges()
+        domSelection.addRange(range)
+        // As in a real browser, the keydown arrives before selectionchange
+        // has told ProseMirror about the new selection.
+        expect(editor.state.selection.empty).toBe(true) // not synced yet
+
+        const event = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true, cancelable: true })
+        editor.view.dom.dispatchEvent(event)
+        expect(event.defaultPrevented).toBe(true)
+        await waitFor(() => expect(container.querySelector('.cw-link-popover')).toBeInTheDocument())
+      } finally {
+        ;(document.activeElement as HTMLElement | null)?.blur()
+        window.getSelection()?.removeAllRanges()
+        restore()
+      }
+    })
+
+    it('reports, instead of swallowing, an error that keeps the link popover from opening', async () => {
+      const restore = mockSelectionRect()
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+      try {
+        const { ref, container } = await renderReadyEditor({ initialContent: '<p>hello</p>' })
+        const editor = ref.current!.getEditor()!
+        editor.commands.focus()
+        await waitFor(() => expect(document.activeElement).toBe(editor.view.dom))
+        editor.commands.setTextSelection({ from: 1, to: 4 })
+        vi.spyOn(editor.view, 'coordsAtPos').mockImplementation(() => { throw new Error('boom') })
+        ctrlK()
+        expect(container.querySelector('.cw-link-popover')).toBeNull()
+        expect(error).toHaveBeenCalledWith('chain-writing: could not open the link popover', expect.objectContaining({ message: 'boom' }))
+      } finally {
+        error.mockRestore()
         ;(document.activeElement as HTMLElement | null)?.blur()
         window.getSelection()?.removeAllRanges()
         restore()
@@ -740,7 +796,7 @@ describe('Editor', () => {
     it('re-places the link popover when the page scrolls', async () => {
       const { moveTo, restore, container } = await withSelectedText()
       try {
-        fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
+        fireEvent.keyDown(document.activeElement!, { key: 'k', ctrlKey: true })
         await waitFor(() => expect(container.querySelector('.cw-link-popover')).toBeInTheDocument())
         const popoverTop = () => (container.querySelector('.cw-link-popover') as HTMLElement).style.top
         expect(popoverTop()).toBe('330px') // bottom 320 + 10
