@@ -255,6 +255,10 @@ interface LinkPopoverState {
 
 function useBubblePos(editor: TiptapEditor | null, toolbarRef: RefObject<HTMLDivElement | null>) {
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(null)
+  // The height the last placement assumed, and a way to place again — see
+  // the layout effect below.
+  const heightUsedRef = useRef(0)
+  const updateRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     if (!editor) return
@@ -272,10 +276,12 @@ function useBubblePos(editor: TiptapEditor | null, toolbarRef: RefObject<HTMLDiv
       // current --cw-ui-scale.
       const u = uiUnit(editor.view.dom)
       const bubbleH = toolbarRef.current?.offsetHeight || 36 * u
+      heightUsedRef.current = bubbleH
       const gap = 8 * u
       const top = rect.top - bubbleH - gap >= 0 ? rect.top - bubbleH - gap : rect.bottom + gap
       setCoords({ top, left: rect.left + rect.width / 2 })
     }
+    updateRef.current = update
     // Delay blur-clear so onMouseDown/onPointerDown handlers on bubble buttons
     // can fire before the bubble unmounts (native pointerdown fires before mousedown).
     // Also don't hide it if focus moved INTO the toolbar itself (keyboard
@@ -315,6 +321,16 @@ function useBubblePos(editor: TiptapEditor | null, toolbarRef: RefObject<HTMLDiv
     }
   }, [editor, toolbarRef])
 
+
+  // The first placement happens on selectionUpdate, before the menu exists,
+  // so it can only assume a height. Once mounted — and before the browser
+  // paints it — measure the real one (taller when it wraps on a phone, or
+  // with --cw-ui-scale) and place it again if it differs: otherwise the menu
+  // would cover the selection, and jump on the first scroll.
+  useLayoutEffect(() => {
+    const height = toolbarRef.current?.offsetHeight
+    if (coords && height && height !== heightUsedRef.current) updateRef.current?.()
+  }, [coords, toolbarRef])
   return coords
 }
 

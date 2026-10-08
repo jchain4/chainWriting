@@ -717,6 +717,23 @@ describe('Editor', () => {
       } finally { cleanupFocus(); restore() }
     })
 
+    it('places the bubble menu above the selection by its real height, not an assumed one', async () => {
+      // e.g. on a phone, where the menu wraps onto two lines: 62px tall, not 36.
+      const descriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')!
+      Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+        configurable: true,
+        get() { return this.classList?.contains('cw-bubble-menu') ? 62 : 0 },
+      })
+      try {
+        const { restore, bubbleTop } = await withSelectedText()
+        try {
+          expect(bubbleTop()).toBe('230px') // 300 - 62 - 8: its bottom edge 8px above the text
+        } finally { cleanupFocus(); restore() }
+      } finally {
+        Object.defineProperty(HTMLElement.prototype, 'offsetHeight', descriptor)
+      }
+    })
+
     it('leaves room for the bubble menu at its scaled size (--cw-ui-scale)', async () => {
       document.documentElement.style.setProperty('--cw-ui-scale', '2')
       const { restore, bubbleTop } = await withSelectedText()
